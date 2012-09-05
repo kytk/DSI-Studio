@@ -10,22 +10,19 @@
 #endif
 
 
-class tessellated_icosahedron
+template<unsigned int fold>
+class TessellatedIcosahedron
 {
 public:
-    unsigned int fold;
-    unsigned int vertices_count;
-    unsigned int half_vertices_count;
-    std::vector<image::vector<3,float> > vertices;
-    std::vector<image::vector<3,short> > faces;
-    std::vector<std::vector<float> > icosa_cos;
+    unsigned int vertex_count;
+    unsigned int half_vertex_count;
 private:
     float edge_length,face_dis,angle_res;
     unsigned short cur_vertex;
     void add_vertex(const image::vector<3,float>& vertex)
     {
         vertices[cur_vertex] = vertex;
-        vertices[cur_vertex + half_vertices_count] = -vertex;
+        vertices[cur_vertex + half_vertex_count] = -vertex;
 		++cur_vertex;
     }
         void get_mid_vertex(const image::vector<3,float>& v1,
@@ -47,12 +44,14 @@ private:
 		v4.normalize();
 	}
 public:
+    std::vector<image::vector<3,float> > vertices;
+    std::vector<image::vector<3,short> > faces;
     // obtain the segmentation from vector u to v
     void get_edge_segmentation(unsigned short from_vertex,unsigned short to_vertex,
-                               std::vector<unsigned short>& edge)
+                               std::vector<unsigned short>& edge,unsigned int order)
     {
 		edge.push_back(from_vertex);
-        if (fold == 2)
+        if (order == 2)
         {
                         image::vector<3,float> uv;
 			get_mid_vertex(vertices[to_vertex],vertices[from_vertex],uv);
@@ -60,7 +59,7 @@ public:
             add_vertex(uv);
         }
 		else
-        if(fold == 4)
+		if(order == 4)
 		{
                         image::vector<3,float> mid;
 			get_mid_vertex(vertices[to_vertex],vertices[from_vertex],mid);
@@ -79,10 +78,10 @@ public:
             image::vector<3,float> uv = vertices[to_vertex];
             uv -= vertices[from_vertex];
             uv.normalize();
-            for (unsigned int index = 1;index < fold;++index)
+            for (unsigned int index = 1;index < order;++index)
             {
                 float phi = angle_res*index;
-                phi /= (float)fold;
+                phi /= (float)order;
                 float y = face_dis/std::cos(phi-angle_res*0.5);
 
                                 image::vector<3,float> vec = uv;
@@ -98,7 +97,7 @@ public:
     }
 	unsigned short opposite(unsigned short v1) const
 	{
-        return (v1 < half_vertices_count) ? v1 + half_vertices_count:v1 - half_vertices_count;
+		return (v1 < half_vertex_count) ? v1 + half_vertex_count:v1 - half_vertex_count;
 	}
     void add_face(short v1,short v2,short v3)
     {
@@ -142,17 +141,17 @@ public:
 	}
 	// This function obtain the tessellated points and faces from a icosaheron triangle
     template<typename input_type1,typename input_type2,typename input_type3>
-        void build_faces(input_type1 edge0,input_type2 edge1,input_type3 edge2)
+        void build_faces(input_type1 edge0,input_type2 edge1,input_type3 edge2,unsigned int folding)
     {
-        add_faces_in_triangle(edge0,edge1,edge2,fold);
-        if(fold == 3)
+		add_faces_in_triangle(edge0,edge1,edge2,folding);
+		if(folding == 3)
 		{
                         image::vector<3,float> mid;
 			get_mid_vertex(vertices[edge0[0]],vertices[edge1[0]],vertices[edge2[0]],mid);
 			add_vertex(mid);
 			return;
 		}
-        if(fold == 4)
+		if(folding == 4)
 		{
                         image::vector<3,float> u;
 			get_mid_vertex(vertices[edge0[2]],vertices[edge2[2]],u);
@@ -163,7 +162,7 @@ public:
 			add_vertex(u);
 			return;
 		}
-        if(fold == 5)
+		if(folding == 5)
 		{
                         image::vector<3,float> u1,u2,u3,u4,u5,u6;
 			get_mid_vertex(vertices[edge0[0]],vertices[edge0[3]],vertices[edge2[2]],u1);
@@ -180,7 +179,7 @@ public:
 			add_vertex(u6);
 			return;
 		}
-        if(fold == 6)
+		if(folding == 6)
 		{
                         image::vector<3,float> u1,u2,u3,u4,u5,u6,u7,u8,u9,u10;// (6-1)*(6-2)/2
 			get_mid_vertex(vertices[edge0[0]],vertices[edge1[0]],vertices[edge2[0]],u6);
@@ -210,7 +209,7 @@ public:
 			add_vertex(u10);
 			return;
 		}
-        if(fold == 8)
+		if(folding == 8)
 		{
                         image::vector<3,float> u[22]; // (8-1)*(8-2)/2=21, add one for index started from1
 			get_mid_vertex(vertices[edge0[4]],vertices[edge2[4]],u[8]);
@@ -245,7 +244,7 @@ public:
 		}
     }
 
-    void build_icosahedron()
+    void build_icosahedron(void)
     {
         // the top vertex
         add_vertex(image::vector<3,float>(0,0,1.0));
@@ -264,53 +263,53 @@ public:
 
         std::vector<std::vector<unsigned short> > edges(15);
         // top hat
-        get_edge_segmentation(0,1,edges[0]);
-        get_edge_segmentation(0,2,edges[1]);
-        get_edge_segmentation(0,3,edges[2]);
-        get_edge_segmentation(0,4,edges[3]);
-        get_edge_segmentation(0,5,edges[4]);
+        get_edge_segmentation(0,1,edges[0],fold);
+        get_edge_segmentation(0,2,edges[1],fold);
+        get_edge_segmentation(0,3,edges[2],fold);
+        get_edge_segmentation(0,4,edges[3],fold);
+        get_edge_segmentation(0,5,edges[4],fold);
         // the edge of hat
-        get_edge_segmentation(1,2,edges[5]);
-        get_edge_segmentation(2,3,edges[6]);
-        get_edge_segmentation(3,4,edges[7]);
-        get_edge_segmentation(4,5,edges[8]);
-        get_edge_segmentation(5,1,edges[9]);
+        get_edge_segmentation(1,2,edges[5],fold);
+        get_edge_segmentation(2,3,edges[6],fold);
+        get_edge_segmentation(3,4,edges[7],fold);
+        get_edge_segmentation(4,5,edges[8],fold);
+        get_edge_segmentation(5,1,edges[9],fold);
         // skirt
-        get_edge_segmentation(1,opposite(4),edges[10]);
-        get_edge_segmentation(2,opposite(5),edges[11]);
-        get_edge_segmentation(3,opposite(1),edges[12]);
-        get_edge_segmentation(4,opposite(2),edges[13]);
-        get_edge_segmentation(5,opposite(3),edges[14]);
+        get_edge_segmentation(1,opposite(4),edges[10],fold);
+        get_edge_segmentation(2,opposite(5),edges[11],fold);
+        get_edge_segmentation(3,opposite(1),edges[12],fold);
+        get_edge_segmentation(4,opposite(2),edges[13],fold);
+        get_edge_segmentation(5,opposite(3),edges[14],fold);
 
 		std::vector<std::vector<unsigned short> > redges(15);
                 for(unsigned int index = 0;index < redges.size();++index)
 		    std::transform(edges[index].begin(),
 						   edges[index].end(),
 						   std::back_inserter(redges[index]),
-                           (boost::lambda::_1 + half_vertices_count) % vertices_count);
+						   (boost::lambda::_1 + half_vertex_count) % vertex_count);
 
 		// hat faces
-        build_faces(edges[0].begin(),edges[5].begin(),edges[1].rbegin());
-        build_faces(edges[1].begin(),edges[6].begin(),edges[2].rbegin());
-        build_faces(edges[2].begin(),edges[7].begin(),edges[3].rbegin());
-        build_faces(edges[3].begin(),edges[8].begin(),edges[4].rbegin());
-        build_faces(edges[4].begin(),edges[9].begin(),edges[0].rbegin());
+		build_faces(edges[0].begin(),edges[5].begin(),edges[1].rbegin(),fold);
+		build_faces(edges[1].begin(),edges[6].begin(),edges[2].rbegin(),fold);
+		build_faces(edges[2].begin(),edges[7].begin(),edges[3].rbegin(),fold);
+		build_faces(edges[3].begin(),edges[8].begin(),edges[4].rbegin(),fold);
+		build_faces(edges[4].begin(),edges[9].begin(),edges[0].rbegin(),fold);
 		// skirt faces
-        build_faces(edges[10].begin(),redges[13].begin(),edges[5].rbegin());
-        build_faces(edges[11].begin(),redges[14].begin(),edges[6].rbegin());
-        build_faces(edges[12].begin(),redges[10].begin(),edges[7].rbegin());
-        build_faces(edges[13].begin(),redges[11].begin(),edges[8].rbegin());
-        build_faces(edges[14].begin(),redges[12].begin(),edges[9].rbegin());
+		build_faces(edges[10].begin(),redges[13].begin(),edges[5].rbegin(),fold);
+		build_faces(edges[11].begin(),redges[14].begin(),edges[6].rbegin(),fold);
+		build_faces(edges[12].begin(),redges[10].begin(),edges[7].rbegin(),fold);
+		build_faces(edges[13].begin(),redges[11].begin(),edges[8].rbegin(),fold);
+		build_faces(edges[14].begin(),redges[12].begin(),edges[9].rbegin(),fold);
 
     }
 	void check_vertex(void)
 	{
 
 		std::vector<float> min_cos(vertices.size());
-                for(unsigned int i = 0;i < vertices_count;++i)
+                for(unsigned int i = 0;i < vertex_count;++i)
 		{
 			float value = 0.0;
-                        for(unsigned int j = 0;j < vertices_count;++j)
+                        for(unsigned int j = 0;j < vertex_count;++j)
 			if(j != i && j != opposite(i) && std::abs(vertices[i]*vertices[j]) > value)
 				value = std::abs(vertices[i]*vertices[j]);
 			min_cos[i] = value;
@@ -319,7 +318,7 @@ public:
 	}
 	void check_face(void)
 	{
-                std::vector<unsigned int> count(vertices_count);
+                std::vector<unsigned int> count(vertex_count);
 		std::vector<float> dis;
                 for(unsigned int index = 0;index < faces.size();++index)
 		{
@@ -335,12 +334,12 @@ public:
 	{
                 std::vector<image::vector<3,float> > sorted_vertices(vertices.begin(),vertices.end());
                 std::sort(sorted_vertices.begin(),sorted_vertices.end(),std::greater<image::vector<3,float> >());
-                for(unsigned int index = 0;index < half_vertices_count;++index)
-            sorted_vertices[index+half_vertices_count] = -sorted_vertices[index];
-        std::vector<unsigned short> index_map(vertices_count);
-                for(unsigned int i = 0;i < vertices_count;++i)
+                for(unsigned int index = 0;index < half_vertex_count;++index)
+			sorted_vertices[index+half_vertex_count] = -sorted_vertices[index];
+		std::vector<unsigned short> index_map(vertex_count);
+                for(unsigned int i = 0;i < vertex_count;++i)
 		{
-                        for(unsigned int j = 0;j < vertices_count;++j)
+                        for(unsigned int j = 0;j < vertex_count;++j)
 				if(vertices[i] == sorted_vertices[j])
 				{
 					index_map[i] = j;
@@ -357,111 +356,18 @@ public:
 		std::sort(faces.begin(),faces.end());
 	}
 public:
-    tessellated_icosahedron(void){}
-    void init(unsigned int vertices_count_,const float* odf_buffer,
-              unsigned int faces_count_,const short* face_buffer)
+    TessellatedIcosahedron(void):
+		vertex_count(fold*fold*10+2),
+		half_vertex_count(vertex_count >> 1),
+		cur_vertex(0),vertices(vertex_count)
     {
-        fold = std::floor(std::sqrt((vertices_count_-2)/10.0)+0.5);
-        vertices_count = vertices_count_;
-        half_vertices_count = vertices_count_ >> 1;
-        cur_vertex = 0;
-        vertices.resize(vertices_count);
-        faces.resize(faces_count_);
-        icosa_cos.clear();
-        for (unsigned int index = 0;index < vertices_count;++index,odf_buffer += 3)
-            vertices[index] = odf_buffer;
-        for (unsigned int  index = 0;index < faces_count_;++index,face_buffer += 3)
-            faces[index] = face_buffer;
-    }
-
-    void init(unsigned int fold_)
-    {
-        fold = fold_;
-        vertices_count = fold*fold*10+2;
-        half_vertices_count = vertices_count >> 1;
-        cur_vertex = 0;
-        vertices.resize(vertices_count);
-        faces.clear();
-        icosa_cos.clear();
         build_icosahedron();
-        sort_vertices();
-        #ifdef _DEBUG
-        check_vertex();
-        check_face();
-        #endif
+		sort_vertices();
+		#ifdef _DEBUG
+		check_vertex();
+		check_face();
+		#endif
 
-    }
-
-    short vertices_pair(short v1)
-    {
-        return (v1 < half_vertices_count) ? v1 + half_vertices_count:v1 - half_vertices_count;
-    }
-
-    float vertices_cos(unsigned int v1,unsigned int v2)
-    {
-        if(icosa_cos.empty())
-        {
-            icosa_cos.resize(vertices_count);
-            for (unsigned int i = 0; i < vertices_count; ++i)
-            {
-                icosa_cos[i].resize(vertices_count);
-                for (unsigned int j = 0; j < vertices_count; ++j)
-                    icosa_cos[i][j] = vertices[i]*vertices[j];
-            }
-        }
-        return icosa_cos[v1][v2];
-    }
-
-    /*
-
-    short* ti_faces(unsigned int index)
-    {
-        return faces[index].begin();
-    }
-
-    unsigned int ti_vertices_count(void)
-    {
-        return vertices_count;
-    }
-
-
-    unsigned int ti_faces_count(void)
-    {
-        return faces_count;
-    }
-
-
-    float* ti_vertices(unsigned int index)
-    {
-        return vertices[index].begin();
-    }
-    */
-
-    void save_to_buffer(std::vector<float>& float_data,std::vector<short>& short_data)
-    {
-        float_data.resize(vertices_count*3);
-        short_data.resize(faces.size()*3);
-        for (unsigned int i = 0,index = 0;i < vertices_count;++i,index += 3)
-            std::copy(vertices[i].begin(),vertices[i].end(),float_data.begin()+index);
-        for (unsigned int i = 0,index = 0;i < faces.size();++i,index += 3)
-            std::copy(faces[i].begin(),faces[i].end(),short_data.begin()+index);
-    }
-
-    short discretize(float vx,float vy,float vz)
-    {
-        short dir_index = 0;
-        float max_value = 0.0;
-        image::vector<3,float> v(vx,vy,vz);
-        for (unsigned int index = 0; index < vertices_count; ++index)
-        {
-            float value = vertices[index]*v;
-            if (value > max_value)
-            {
-                max_value = value;
-                dir_index = index;
-            }
-        }
-        return dir_index;
     }
 };
 

@@ -1,7 +1,5 @@
 #include <sstream>
 #include <string>
-#include "image/image.hpp"
-#include <boost/lambda/lambda.hpp>
 #include "dwi_header.hpp"
 #include "mat_file.hpp"
 
@@ -67,7 +65,10 @@ bool DwiHeader::open(const char* filename)
         unsigned int gev_length = 0;
         const double* gvec = (const double*)header.get_ge_data(0x0019,0x100E,gev_length);// B-vector
         if(gvec)
+        {
             std::copy(gvec,gvec+3,bvec.begin());
+            bvec.normalize();
+        }
         else
         // from b-matrix
         {
@@ -89,6 +90,7 @@ bool DwiHeader::open(const char* filename)
                         bvec[1] = 0;
                         bvec[2] = gvec[5];
                     }
+                bvec.normalize();
             }
         }
 
@@ -104,6 +106,7 @@ bool DwiHeader::open(const char* filename)
                 std::istringstream(std::string(bx)) >> bvec[0];
                 std::istringstream(std::string(by)) >> bvec[1];
                 std::istringstream(std::string(bz)) >> bvec[2];
+                bvec.normalize();
             }
         }
     }
@@ -142,7 +145,7 @@ bool DwiHeader::open(const char* filename)
     image::vector<3,float> cbvec;
     image::vector_rotation(bvec.begin(),cbvec.begin(),A,image::vdim<3>());
     bvec = cbvec;
-    bvec.normalize();
+
     return true;
 }
 
@@ -338,7 +341,7 @@ void correct_t2(boost::ptr_vector<DwiHeader>& dwi_files)
     }
 }
 
-bool DwiHeader::output_src(const char* di_file,boost::ptr_vector<DwiHeader>& dwi_files,bool upsampling,bool topdown)
+bool DwiHeader::output_src(const char* di_file,boost::ptr_vector<DwiHeader>& dwi_files)
 {
     sort_dwi(dwi_files);
     unsigned int slice_pile = get_slice_pile(dwi_files);
@@ -357,16 +360,12 @@ bool DwiHeader::output_src(const char* di_file,boost::ptr_vector<DwiHeader>& dwi
     {
         short dimension[3];
         std::copy(geo.begin(),geo.end(),dimension);
-        if(upsampling)
-            std::for_each(dimension,dimension+3,boost::lambda::_1 <<= 1);
         write_mat.add_matrix("dimension",dimension,1,3);
     }
     //store dimension
     {
         float voxel_size[3];
         std::copy(dwi_files.front().voxel_size,dwi_files.front().voxel_size+3,voxel_size);
-        if(upsampling)
-            std::for_each(voxel_size,voxel_size+3,boost::lambda::_1 /= 2.0);
         write_mat.add_matrix("voxel_size",voxel_size,1,3);
     }
 
@@ -375,38 +374,21 @@ bool DwiHeader::output_src(const char* di_file,boost::ptr_vector<DwiHeader>& dwi
     for (unsigned int index = 0,id = 0;check_prog(index,dwi_files.size());index+=slice_pile,++id)
     {
         std::ostringstream name;
-        image::basic_image<short,3> buffer;
-        const unsigned short* ptr = 0;
         name << "image" << id;
         if (slice_pile == 1) // Siemens Mosaic
-        {
-            if(topdown)
-                image::flip_z(dwi_files[index].image);
-            ptr = (const unsigned short*)dwi_files[index].begin();
-            if(upsampling)
-            {
-                buffer.resize(geo);
-                std::copy(ptr,ptr+geo.size(),buffer.begin());
-                image::upsampling(buffer);
-                ptr = (const unsigned short*)&*buffer.begin();
-            }
-        }
+            write_mat.add_matrix(name.str().c_str(),(const unsigned short*)dwi_files[index].begin(),1,geo.size());
         else
         {
             // GE
-            buffer.resize(geo);
+            image::geometry<3> origin_geo = dwi_files.front().image.geometry();
+            origin_geo[2] = slice_pile;
+            image::basic_image<short,3> buffer(origin_geo);
             for (unsigned int z = 0;z < slice_pile;++z)
                 std::copy(dwi_files[index+z].begin(),
                           dwi_files[index+z].begin() + dwi_files[index+z].size(),
                           buffer.begin() + z * dwi_files[index+z].size());
-            if(topdown)
-                image::flip_z(buffer);
-            if(upsampling)
-                image::upsampling(buffer);
-            ptr = (const unsigned short*)&*buffer.begin();
+            write_mat.add_matrix(name.str().c_str(),(const unsigned short*)&*buffer.begin(),1,geo.size());
         }
-        write_mat.add_matrix(name.str().c_str(),ptr,1,(upsampling) ? geo.size()*8: geo.size());
-
     }
     // store bvec file
     {

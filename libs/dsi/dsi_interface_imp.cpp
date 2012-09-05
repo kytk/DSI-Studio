@@ -1,13 +1,12 @@
-#include <boost/ptr_container/ptr_vector.hpp>
-#include <boost/math/distributions/students_t.hpp>
-#include <boost/mpl/vector.hpp>
-#include <boost/mpl/insert_range.hpp>
-#include <boost/mpl/begin_end.hpp>
-
 #include "stdafx.h"
-#include "tessellated_icosahedron.hpp"
+#include "odf_fem_interface_static_link.hpp"
 #include "prog_interface_static_link.h"
 #include "mat_file.hpp"
+#include <boost/ptr_container/ptr_vector.hpp>
+#include <boost/math/distributions/students_t.hpp>
+
+
+
 #include "basic_voxel.hpp"
 #include "image_model.hpp"
 #include "odf_decomposition.hpp"
@@ -25,114 +24,16 @@
 #include "gqi_mni_reconstruction.hpp"
 
 #include "odf_deconvolusion.hpp"
-#include "odf_decomposition.hpp"
+
+#include "dti_voxel.hpp"
+#include "dsi_voxel.hpp"
+#include "qbi_voxel.hpp"
+#include "gqi_voxel.hpp"
 #include "image_model.hpp"
-typedef boost::mpl::vector<
-    ReadDWIData,
-    ADCProfile,
-    Dwi2Tensor,
-    TensorEigenAnalysis
-//OutputODF
-> dti_process;
 
 
-template<typename reco_type>
-struct odf_reco_type{
-    typedef boost::mpl::vector<
-        ODFDeconvolusion,
-        ODFDecomposition,
-        DetermineFiberDirections,
-        SaveFA,
-        SaveDirIndex,
-        OutputODF
-    > common_odf_process;
-    typedef typename boost::mpl::insert_range<common_odf_process,boost::mpl::begin<common_odf_process>::type,reco_type>::type type0;
-    typedef typename boost::mpl::push_front<type0,ReadDWIData>::type type; // add ReadDWIData to the front
-};
 
-template<typename reco_type>
-struct estimation_type{
-    typedef boost::mpl::vector<
-        DetermineFiberDirections,
-        EstimateResponseFunction
-    > common_estimation_process;
-
-    typedef typename boost::mpl::insert_range<common_estimation_process,boost::mpl::begin<common_estimation_process>::type,reco_type>::type type0;
-    typedef typename boost::mpl::push_front<type0,ReadDWIData>::type type; // add ReadDWIData to the front
-};
-
-
-typedef odf_reco_type<boost::mpl::vector<
-    QSpace2Pdf,
-    Pdf2Odf
-> >::type dsi_process;
-
-const unsigned int equator_sample_count = 40;
-typedef odf_reco_type<boost::mpl::vector<
-    QBIReconstruction<equator_sample_count>
-> >::type qbi_process;
-
-typedef odf_reco_type<boost::mpl::vector<
-    SHDecomposition<8>
-> >::type qbi_sh_process;
-
-
-typedef odf_reco_type<boost::mpl::vector<
-    CorrectB0,
-    QSpace2Odf
-> >::type gqi_process;
-
-
-// for ODF deconvolution
-typedef estimation_type<boost::mpl::vector<
-    QSpace2Pdf,
-    Pdf2Odf
-> >::type dsi_estimate_response_function;
-
-// for ODF deconvolution
-typedef estimation_type<boost::mpl::vector<
-    QBIReconstruction<equator_sample_count>
-> >::type qbi_estimate_response_function;
-
-// for ODF deconvolution
-typedef estimation_type<boost::mpl::vector<
-    SHDecomposition<8>
-> >::type qbi_sh_estimate_response_function;
-
-
-// for ODF deconvolution
-typedef boost::mpl::vector<
-    ReadDWIData,
-    CorrectB0,
-    QSpace2Odf,
-    DetermineFiberDirections,
-    RecordQA,
-    EstimateResponseFunction
-> gqi_estimate_response_function;
-
-typedef boost::mpl::vector<
-    GQI_MNI,
-    //GQI_phantom,
-    ODFDecomposition,
-    DetermineFiberDirections,
-    SaveFA,
-    SaveDirIndex,
-    OutputODF
-> gqi_mni_process;
-
-typedef boost::mpl::vector<
-    GQI_MNI,
-    AccumulateODF
-> gqi_mni_template_process;
-
-typedef boost::mpl::vector<
-    ODFLoader,
-    DetermineFiberDirections,
-    SaveFA,
-    SaveDirIndex
-> reprocess_odf;
-
-
+#include "odf_decomposition.hpp"
 #include "mix_gaussian_model.hpp"
 #include "racian_noise.hpp"
 
@@ -146,6 +47,10 @@ boost::variate_generator<boost::mt19937&,
 boost::normal_distribution<float> > RacianNoise::gen_normal(RacianNoise::generator,RacianNoise::normal);
 boost::variate_generator<boost::mt19937&,
 boost::uniform_real<float> > RacianNoise::gen_uniform(RacianNoise::generator,RacianNoise::uniform);
+
+const char* process_position = 0;
+
+
 std::string error_msg;
 
 
@@ -213,31 +118,56 @@ extern "C"
 
 
 extern "C"
-    const char* reconstruction(ImageModel* image_model,unsigned int method_id,const float* param_values)
+    const char* reconstruction(ImageModel* image_model,unsigned int* options,const float* param_values)
 {
+    unsigned int method = options[0];
+    unsigned int threshold_count = options[1];
+    unsigned int odf_fold = options[2];
+    unsigned int need_odf = options[3];
+    unsigned int gfa_as_threshold = options[4];
+    unsigned int de_odf = options[5];
+    unsigned int decompose = options[6];
+    unsigned int half_sphere = options[7];
+    unsigned int odf_deconvolusion_iterative = options[8];
+    unsigned int max_fiber_number = options[9];
     static std::string output_name;
     try
     {
+        process_position = __FUNCTION__;
+        ti_initialize(odf_fold);
+        image_model->thread_count = threshold_count;
         image_model->voxel.param = param_values;
+        image_model->voxel.full_odf_dimension = ti_vertices_count();
+        image_model->voxel.need_odf = need_odf;
+        image_model->voxel.gfa_as_threshold = gfa_as_threshold;
+        image_model->voxel.odf_deconvolusion = de_odf;
+        image_model->voxel.odf_decomposition = decompose;
+        image_model->voxel.half_sphere = half_sphere;
+        image_model->voxel.odf_deconvolusion_iterative = odf_deconvolusion_iterative;
+        image_model->voxel.max_fiber_number = max_fiber_number;
         std::ostringstream out;
-        out << ".odf" << image_model->voxel.ti.fold;// odf_order
-        out << ".f" << image_model->voxel.max_fiber_number;
-        if (image_model->voxel.need_odf)
+        out << ".odf" << odf_fold;
+        out << ".f" << max_fiber_number;
+        if (need_odf)
             out << "rec";
-        if (image_model->voxel.half_sphere)
+        if (gfa_as_threshold)
+            out << ".gfa_mask";
+        if (half_sphere)
             out << ".hs";
-        if (image_model->voxel.odf_deconvolusion)
+        if (de_odf)
             out << ".de" << param_values[2];
-        if (image_model->voxel.odf_decomposition)
-            out << ".dec" << param_values[3];
-        switch (method_id)
+        if (odf_deconvolusion_iterative)
+            out << ".iter" << (int) std::floor(param_values[3]+0.5);
+        if (decompose)
+            out << ".dec";
+        switch (method)
         {
         case 0: //DSI local max
-            if (image_model->voxel.odf_deconvolusion || image_model->voxel.odf_decomposition)
+            if (de_odf)
             {
                 if (!image_model->reconstruct<dsi_estimate_response_function>())
                     return "reconstruction calceled";
-                begin_prog("deconvolving");
+                begin_prog("preparing deconvolution");
             }
             out << ".dsi."<< (int)param_values[0] << ".fib";
             if (!image_model->reconstruct<dsi_process>(out.str()))
@@ -246,28 +176,28 @@ extern "C"
         case 1://DTI
             out << ".dti.fib";
             image_model->voxel.max_fiber_number = 1;
-            if (!image_model->reconstruct<dti_process>(out.str()))
+            if (!image_model->reconstruct<dti_transformation_process>(out.str()))
                 return "reconstruction canceled";
             break;
 
         case 2://QBI
-            if (image_model->voxel.odf_deconvolusion || image_model->voxel.odf_decomposition)
+            if (de_odf)
             {
                 if (!image_model->reconstruct<qbi_estimate_response_function>())
                     return "reconstruction calceled";
-                begin_prog("deconvolving");
+                begin_prog("preparing deconvolution");
             }
             out << ".qbi."<< param_values[0] << "_" << param_values[1] << ".fib";
             if (!image_model->reconstruct<qbi_process>(out.str()))
                 return "reconstruction canceled";
             break;
         case 3://QBI
-            if (image_model->voxel.odf_deconvolusion || image_model->voxel.odf_decomposition)
+            if (de_odf)
             {
                 if (!image_model->reconstruct<qbi_sh_estimate_response_function>())
                     return "reconstruction calceled";
 
-                begin_prog("deconvolving");
+                begin_prog("preparing deconvolution");
             }
             out << ".qbi.sh."<< param_values[0] << ".fib";
             if (!image_model->reconstruct<qbi_sh_process>(out.str()))
@@ -275,93 +205,71 @@ extern "C"
             break;
 
         case 4://GQI
-            if (image_model->voxel.odf_deconvolusion || image_model->voxel.odf_decomposition)
+            if (de_odf)
             {
                 if (!image_model->reconstruct<gqi_estimate_response_function>())
                     return "reconstruction calceled";
-                begin_prog("deconvolving");
+                begin_prog("preparing deconvolution");
             }
-            out << (image_model->voxel.r2_weighted ? ".gqir2.":".gqi.") << param_values[0] << ".fib";
+            out << ".gqi."<< param_values[0] << ".fib";
             if (!image_model->reconstruct<gqi_process>(out.str()))
                 return "reconstruction canceled";
             break;
-            /*
+
+        case 5://GQI
+            if (de_odf)
+            {
+                if (!image_model->reconstruct<gqi_r2_estimate_response_function>())
+                    return "reconstruction calceled";
+                begin_prog("preparing deconvolution");
+            }
+            out << ".gqi.r2."<< param_values[0] << ".fib";
+            if (!image_model->reconstruct<gqi_r2_process>(out.str()))
+                return "reconstruction canceled";
+            break;
         case 6:
             out << ".gqi.hardi"<< param_values[0] << ".src";
             if (!image_model->reconstruct<gqi_adaptor_process>(out.str()))
                 return "reconstruction canceled";
             break;
-            */
         case 7:
             // run gqi to get the spin quantity
             std::fill(image_model->mask.begin(),image_model->mask.end(),1.0);
             if (!image_model->reconstruct<gqi_estimate_response_function>())
                 return "reconstruction calceled";
-            out << (image_model->voxel.r2_weighted ? ".qsdr2.":".qsdr.");
-            out << param_values[0] << "." << param_values[1] << "mm.fib";
-            begin_prog("deforming");
+            out << ".mni.gqi.";
+            if(param_values[2] > 0)
+                out << ".r2.";
+            out << param_values[0] << "vs" << param_values[1] << ".fib";
+            begin_prog("preparing deformation");
             if (!image_model->reconstruct<gqi_mni_process>(out.str()))
                 return "reconstruction canceled";
             break;
-
-        case 8:
-            {
-                for(int index = 0;index < image_model->voxel.file_list.size();++index)
-                {
-                    {
-                        std::ostringstream msg;
-                        msg << "loading (" << index << "/" << image_model->voxel.file_list.size();
-                        begin_prog(msg.str().c_str());
-                    }
-                    if(index)
-                        if(!image_model->load_from_file(image_model->voxel.file_list[index].c_str()))
-                        {
-                            output_name = "Cannot open file ";
-                            output_name += image_model->voxel.file_list[index];
-                            return output_name.c_str();
-                        }
-                    {
-                        std::ostringstream msg;
-                        msg << "running (" << index << "/" << image_model->voxel.file_list.size();
-                        begin_prog(msg.str().c_str());
-                    }
-                    std::fill(image_model->mask.begin(),image_model->mask.end(),1.0);
-                    if (!image_model->reconstruct<gqi_estimate_response_function>()||
-                        !image_model->reconstruct<gqi_mni_template_process>())
-                        return "reconstruction calceled";
-                }
-
-                //averaging
-                for (unsigned int index = 0;index < image_model->voxel.template_odfs.size();++index)
-                {
-                    std::for_each(image_model->voxel.template_odfs[index].begin(),
-                                  image_model->voxel.template_odfs[index].end(),
-                                  boost::lambda::_1 /= image_model->voxel.file_list.size());
-                }
-
-                out << (image_model->voxel.r2_weighted ? ".qsdr2.":".qsdr.");
-                out << param_values[0] << "." << param_values[1] << "mm.fib";
-
-                begin_prog("output result without odf");
-                image_model->voxel.need_odf = false;
-                image_model->file_name = image_model->voxel.template_file_name;
-                if (!image_model->reconstruct<reprocess_odf>(out.str()))
-                    return "reconstruction calceled";
-
-                begin_prog("output result without odf");
-                image_model->voxel.need_odf = true;
-                image_model->file_name = image_model->voxel.template_file_name;
-                image_model->file_name += ".rec";
-                if (!image_model->reconstruct<reprocess_odf>(out.str()))
-                    return "reconstruction calceled";
-
-            }
         }
         output_name = image_model->file_name + out.str() + ".gz";
     }
+    catch (std::exception& exp)
+    {
+        error_msg = "Reconstruction error. Please contact the program developer with the following information:";
+        error_msg += exp.what();
+        error_msg += " happened";
+        if (process_position)
+        {
+            error_msg += " in ";
+            error_msg += process_position;
+        }
+        return error_msg.c_str();
+    }
     catch (...)
     {
-        return "unknown exception";
+        error_msg = "Reconstruction error. Please contact the program developer with the following information:";
+        error_msg += "unexpected exception happened in ";
+        if (process_position)
+        {
+            error_msg += " in ";
+            error_msg += process_position;
+        }
+        return error_msg.c_str();
     }
     return output_name.c_str();
 }
@@ -370,30 +278,29 @@ extern "C"
 bool output_odfs(const image::basic_image<unsigned char,3>& mni_mask,
                  const char* out_name,
                  const char* ext,
-                 std::vector<std::vector<float> >& odfs,
-                 const tessellated_icosahedron& ti,
-                 const float* vs,
+                 const std::vector<std::vector<float> >& odfs,
                  bool record_odf = true)
 {
     begin_prog("output");
     ImageModel image_model;
-    image_model.set_dimension(mni_mask.width(),mni_mask.height(),mni_mask.depth());
-    image_model.voxel.ti = ti;
+    image_model.set_dimension(mni_width,mni_height,mni_depth);
+    image_model.voxel.full_odf_dimension = ti_vertices_count();
     image_model.voxel.q_count = 0;
+    image_model.voxel.need_odf = true;
     image_model.voxel.odf_decomposition = false;
     image_model.voxel.odf_deconvolusion = false;
+    image_model.voxel.gfa_as_threshold = false;
     image_model.voxel.half_sphere = false;
     image_model.voxel.max_fiber_number = 3;
     image_model.voxel.qa_scaling = 1;
-    image_model.voxel.need_odf = record_odf;
-    image_model.voxel.template_odfs.swap(odfs);
     image_model.thread_count = 1;
-    image_model.file_name = out_name;
     std::copy(mni_mask.begin(),mni_mask.end(),image_model.mask.begin());
-    std::copy(vs,vs+3,image_model.voxel.voxel_size);
+    std::fill(image_model.voxel.voxel_size,image_model.voxel.voxel_size+3,2.0);
+    image_model.file_name = out_name;
+    image_model.voxel.param = (const float*)&odfs;
+    image_model.voxel.need_odf = record_odf;
     if (prog_aborted() || !image_model.reconstruct<reprocess_odf>(ext))
         return false;
-    image_model.voxel.template_odfs.swap(odfs);
     return true;
 }
 
@@ -403,91 +310,74 @@ extern "C"
                      const char* const * file_names,
                      unsigned int num_files)
 {
-    tessellated_icosahedron ti;
-    float vs[3];
     image::basic_image<unsigned char,3> mask;
     std::vector<std::vector<float> > odfs;
     begin_prog("averaging");
     can_cancel(true);
     unsigned int half_vertex_count = 0;
-    unsigned int row,col;
     for (unsigned int index = 0;check_prog(index,num_files);++index)
     {
         const char* file_name = file_names[index];
         MatFile reader;
         if(!reader.load_from_file(file_name))
         {
-            std::cout << "Cannot open file " << file_name << std::endl;
+            std::cout << "Cannot open file" << std::endl;
+            std::cout << file_name << std::endl;
             return false;
         }
         if(index == 0)
         {
+            unsigned int row,col;
             const float* odf_buffer;
+            const float* fa0;
             const short* face_buffer;
             const unsigned short* dimension;
-            const float* vs_ptr;
-            const float* fa0;
-            unsigned int face_num,odf_num;
-            if(!reader.get_matrix("dimension",row,col,dimension) ||
-               !reader.get_matrix("fa0",row,col,fa0) ||
-               !reader.get_matrix("voxel_size",row,col,vs_ptr) ||
-               !reader.get_matrix("odf_faces",row,face_num,face_buffer) ||
-               !reader.get_matrix("odf_vertices",row,odf_num,odf_buffer))
+            reader.get_matrix("dimension",row,col,dimension);
+            mask.resize(image::geometry<3>(dimension));
+            reader.get_matrix("fa0",row,col,fa0);
+            for(unsigned int index = 0;index < mask.size();++index)
+                mask[index] = fa0[index] == 0 ? 0:1;
+
+            reader.get_matrix("odf_vertices",row,col,odf_buffer);
+            if (!odf_buffer)
             {
-                std::cout << "Cannot find image information in " << file_name << std::endl;
+                std::cout << "Cannot find odf vertices" << std::endl;
+                std::cout << file_name << std::endl;
                 return false;
             }
-            mask.resize(image::geometry<3>(dimension));
-            for(unsigned int index = 0;index < mask.size();++index)
-                if(fa0[index] != 0.0)
-                    mask[index] = 1;
-            std::copy(vs_ptr,vs_ptr+3,vs);
-            ti.init(odf_num,odf_buffer,face_num,face_buffer);
-            half_vertex_count = odf_num >> 1;
+            half_vertex_count = col >> 1;
+            ti_load_odf_vertices(col,odf_buffer);
+            reader.get_matrix("odf_faces",row,col,face_buffer);
+            if (!face_buffer)
+            {
+                std::cout << "Cannot find odf faces" << std::endl;
+                std::cout << file_name << std::endl;
+                return false;
+            }
+            ti_load_odf_faces(col,face_buffer);
         }
         else
         // check odf consistency
         {
+            unsigned int row,col;
             const float* odf_buffer;
-            const unsigned short* dimension;
-            unsigned int odf_num;
-            if(!reader.get_matrix("dimension",row,col,dimension) ||
-               !reader.get_matrix("odf_vertices",row,odf_num,odf_buffer))
-            {
-                std::cout << "Cannot find image information in " << file_name << std::endl;
+            reader.get_matrix("odf_vertices",row,col,odf_buffer);
+            if (!odf_buffer)
                 return false;
-            }
-
-            if(odf_num != ti.vertices_count || dimension[0] != mask.width() ||
-                    dimension[1] != mask.height() || dimension[2] != mask.depth())
-            {
-                std::cout << "Inconsistent ODF orientations in " << file_name << std::endl;
+            if(col != ti_vertices_count())
                 return false;
-            }
             for (unsigned int index = 0;index < col;++index,odf_buffer += 3)
             {
-                if(ti.vertices[index][0] != odf_buffer[0] ||
-                   ti.vertices[index][1] != odf_buffer[1] ||
-                   ti.vertices[index][2] != odf_buffer[2])
+                if(ti_vertices(index)[0] != odf_buffer[0] ||
+                   ti_vertices(index)[1] != odf_buffer[1] ||
+                   ti_vertices(index)[2] != odf_buffer[2])
                 {
-                    std::cout << "Inconsistent ODF orientations in " << file_name << std::endl;
+                    std::cout << "Inconsistent ODF" << std::endl;
+                    std::cout << file_name << std::endl;
                     return false;
                 }
             }
         }
-
-        {
-            const float* fa0;
-            if(!reader.get_matrix("fa0",row,col,fa0))
-            {
-                std::cout << "Cannot find image information in " << file_name << std::endl;
-                return false;
-            }
-            for(unsigned int index = 0;index < mask.size();++index)
-                if(fa0[index] != 0.0)
-                    mask[index] = 1;
-        }
-
         std::vector<const float*> odf_bufs;
         std::vector<unsigned int> odf_bufs_size;
         //get_odf_bufs(reader,odf_bufs,odf_bufs_size);
@@ -496,38 +386,21 @@ extern "C"
             odf_bufs_size.clear();
             for (unsigned int odf_index = 0;1;++odf_index)
             {
+                unsigned int row,col;
                 std::ostringstream out;
                 out << "odf" << odf_index;
                 const float* odf_buf = 0;
-                if (!reader.get_matrix(out.str().c_str(),row,col,odf_buf))
+                reader.get_matrix(out.str().c_str(),row,col,odf_buf);
+                if (!odf_buf)
                     break;
                 odf_bufs.push_back(odf_buf);
                 odf_bufs_size.push_back(row*col);
             }
         }
-        if(odfs.empty())
-        {
-            odfs.resize(odf_bufs.size());
-            for(unsigned int i = 0;i < odf_bufs.size();++i)
-                odfs[i].resize(odf_bufs_size[i]);
-        }
-        else
-        {
-            bool inconsistence = false;
-            if(odfs.size() != odf_bufs.size())
-                inconsistence = true;
-            else
-                for(unsigned int i = 0;i < odf_bufs.size();++i)
-                    if(odfs[i].size() != odf_bufs_size[i])
-                        inconsistence = true;
-            if(inconsistence)
-            {
-                std::cout << "Inconsistence mask coverage in" << file_name << std::endl;
-                return false;
-            }
-        }
+        odfs.resize(odf_bufs.size());
         for(unsigned int i = 0;i < odf_bufs.size();++i)
         {
+            odfs[i].resize(odf_bufs_size[i]);
             image::add(odfs[i].begin(),odfs[i].end(),odf_bufs[i]);
             for(unsigned int j = 0;j < odf_bufs_size[i];)
             {
@@ -546,8 +419,8 @@ extern "C"
         for (unsigned int j = 0;j < odfs[odf_index].size();++j)
             odfs[odf_index][j] /= (double)num_files;
 
-    output_odfs(mask,out_name,".mean.odf.fib",odfs,ti,vs);
-    output_odfs(mask,out_name,".mean.fib",odfs,ti,vs,false);
+    output_odfs(mask,out_name,".mean.odf.fib",odfs);
+    output_odfs(mask,out_name,".mean.fib",odfs,false);
 }
 
 extern "C"
@@ -557,8 +430,7 @@ extern "C"
         const char* crossing_angle_iteration,
         unsigned char repeat_num)
 {
-    tessellated_icosahedron ti;
-    ti.init(odf_fold);
+    ti_initialize(odf_fold);
     Layout layout(s0_snr,mean_dif);
     if (!layout.load_b_table(bvec_file_name))
         return false;

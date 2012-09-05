@@ -3,6 +3,7 @@
 #include <string>
 #include <set>
 
+#include "odf_fem_interface_static_link.hpp"
 #include "prog_interface_static_link.h"
 #include "mat_file.hpp"
 typedef class ReadMatFile MatReader;

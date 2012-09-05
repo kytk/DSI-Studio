@@ -95,11 +95,6 @@ RegionTableWidget::RegionTableWidget(tracking_window& cur_tracking_window_,QWidg
 
     QObject::connect(this,SIGNAL(cellClicked(int,int)),this,SLOT(check_check_status(int,int)));
     QObject::connect(this,SIGNAL(itemChanged(QTableWidgetItem*)),this,SLOT(updateRegions(QTableWidgetItem*)));
-
-    // for updating region
-    timer = new QTimer(this);
-    timer->setInterval(1000);
-    connect(timer, SIGNAL(timeout()), this, SLOT(check_update()));
 }
 
 
@@ -207,13 +202,12 @@ void RegionTableWidget::draw_region(QImage& qimage)
         }
     }
 }
-void RegionTableWidget::draw_mosaic_region(QImage& qimage,unsigned int mosaic_size,unsigned int skip)
+void RegionTableWidget::draw_mosaic_region(QImage& qimage,unsigned int mosaic_size)
 {
     int X, Y, Z;
     image::geometry<3> geo = cur_tracking_window.slice.geometry;
-    unsigned int slice_number = geo[2] >> skip;
-    std::vector<int> shift_x(slice_number),shift_y(slice_number);
-    for(unsigned int z = 0;z < slice_number;++z)
+    std::vector<int> shift_x(geo[2]),shift_y(geo[2]);
+    for(unsigned int z = 0;z < geo[2];++z)
     {
         shift_x[z] = geo[0]*(z%mosaic_size);
         shift_y[z] = geo[1]*(z/mosaic_size);
@@ -227,10 +221,10 @@ void RegionTableWidget::draw_mosaic_region(QImage& qimage,unsigned int mosaic_si
         for (unsigned int index = 0;index < regions[roi_index].size();++index)
         {
             regions[roi_index].getSlicePosition(&cur_tracking_window.slice, index, X, Y, Z);
-            if(Z != ((Z >> skip) << skip))
+            if(Z >= geo[2])
                 continue;
-            X += shift_x[Z >> skip];
-            Y += shift_y[Z >> skip];
+            X += shift_x[Z];
+            Y += shift_y[Z];
             if(X >= qimage.width() || Y >= qimage.height())
                 continue;
             qimage.setPixel(X,Y,(unsigned int)qimage.pixel(X,Y) | cur_color);
@@ -264,7 +258,6 @@ void RegionTableWidget::load_region(void)
         regions.back().assign(region.get());
     }
     emit need_update();
-    timer->start();
 }
 
 void RegionTableWidget::save_region(void)
@@ -295,9 +288,6 @@ void RegionTableWidget::save_region_info(void)
 
     std::ofstream out(filename.toLocal8Bit().begin());
     out << "x\ty\tz";
-    for(unsigned int index = 0;index < cur_tracking_window.handle->fib_data.fib.findex.size();++index)
-            out << "\tdx" << index << "\tdy" << index << "\tdz" << index;
-
     for(unsigned int index = 0;index < cur_tracking_window.view_name.size();++index)
         if(cur_tracking_window.view_name[index] != "color")
             out << "\t" << cur_tracking_window.view_name[index];
@@ -307,10 +297,11 @@ void RegionTableWidget::save_region_info(void)
     {
         std::vector<float> data;
         image::vector<3,short> point(regions[currentRow()].get()[index]);
-        cur_tracking_window.handle->get_voxel_info2(point[0],point[1],point[2],data);
         cur_tracking_window.handle->get_voxel_information(point[0],point[1],point[2],data);
-        std::copy(point.begin(),point.end(),std::ostream_iterator<float>(out,"\t"));
-        std::copy(data.begin(),data.end(),std::ostream_iterator<float>(out,"\t"));
+        std::copy(point.begin(),point.end(),
+                  std::ostream_iterator<float>(out,"\t"));
+        std::copy(data.begin(),data.begin()+cur_tracking_window.view_name.size(),
+                  std::ostream_iterator<float>(out,"\t"));
         out << std::endl;
     }
 }
@@ -355,7 +346,6 @@ void RegionTableWidget::whole_brain(void)
     add_region("whole brain",seed_id);
     add_points(points,false);
     emit need_update();
-    timer->start();
 }
 extern std::vector<float> mni_fa0_template_tran;
 extern image::basic_image<float,3> mni_fa0_template;
@@ -381,7 +371,6 @@ void RegionTableWidget::add_atlas(void)
     add_region(cur_tracking_window.ui->atlasComboBox->currentText(),seed_id);
     add_points(points,false);
     emit need_update();
-    timer->start();
 }
 
 void RegionTableWidget::add_points(std::vector<image::vector<3,short> >& points,bool erase)
@@ -391,7 +380,6 @@ void RegionTableWidget::add_points(std::vector<image::vector<3,short> >& points,
     regions[currentRow()].add_points(points,erase);
     item(currentRow(),0)->setCheckState(Qt::Checked);
     item(currentRow(),0)->setData(Qt::ForegroundRole,QBrush(Qt::black));
-    timer->start();
 }
 
 bool RegionTableWidget::has_seeding(void)
@@ -421,19 +409,6 @@ void RegionTableWidget::setROIs(ThreadData* data)
             data->setRegions(regions[index].get(),
                              regions[index].regions_feature);
 }
-
-void RegionTableWidget::check_update(void)
-{
-
-    for(unsigned int index = 0;index < regions.size();++index)
-        if(regions[index].has_background_thread())
-        {
-            emit need_update();
-            return;
-        }
-    timer->stop();
-}
-
 void RegionTableWidget::do_action(int id)
 {
     if (regions.empty())
@@ -510,5 +485,4 @@ void RegionTableWidget::do_action(int id)
         break;
     }
     emit need_update();
-    timer->start();
 }

@@ -473,10 +473,7 @@ void GLWidget::paintGL()
     if (tracts && get_param("show_tract"))
     {
         glEnable(GL_COLOR_MATERIAL);
-        if(get_param("tract_style") != 1)// 1 = tube
-            glDisable(GL_LIGHTING);
-        else
-            setupLight((float)(get_param("tract_light_ambient"))/10.0,
+        setupLight((float)(get_param("tract_light_ambient"))/10.0,
                    (float)(get_param("tract_light_diffuse"))/10.0,
                    (float)(get_param("tract_light_dir"))*3.1415926*2.0/10.0,
                    (float)(get_param("tract_light_shading"))*3.1415926/20.0,
@@ -511,7 +508,8 @@ void GLWidget::paintGL()
             end_point_shift = get_param("end_point_shift");
             makeTracts();
         }
-
+        if(!tract_style)
+            glDisable(GL_LIGHTING);
         glCallList(tracts);
         glPopMatrix();
         glDisable(GL_COLOR_MATERIAL);
@@ -688,15 +686,12 @@ void GLWidget::add_odf(int x,int y,int z)
 {
     ODFModel* handle = cur_tracking_window.handle;
     image::vector<3,float> pos(x,y,z);
-
-    const float* odf_buffer =
-            handle->fib_data.fib.get_odf_data(
-                image::pixel_index<3>(pos[0],pos[1],pos[2],cur_tracking_window.slice.geometry).index());
-
-
+    const float* odf_buffer = get_odf_data(handle,
+            image::pixel_index<3>(
+                pos[0],pos[1],pos[2],cur_tracking_window.slice.geometry).index());
     if(!odf_buffer)
         return;
-    static float size_set[] = {0.5,1.0,1.5,2.0,4.0,8.0,16.0,32.0};
+    static float size_set[] = {0.5,1.0,2.0,4.0,8.0,16.0,32.0};
     float scaling = size_set[get_param("odf_size")]*2.0/max_fa;
     unsigned int odf_size = cur_tracking_window.odf_size;
     unsigned int half_odf = odf_size >> 1;
@@ -704,40 +699,6 @@ void GLWidget::add_odf(int x,int y,int z)
     std::vector<image::vector<3,float> >::iterator iter = odf_points.end()-odf_size;
     std::vector<image::vector<3,float> >::iterator end = odf_points.end();
     std::fill(iter,end,pos);
-
-    // smooth the odf a bit
-
-    std::vector<float> new_odf_buffer;
-    if(get_param("odf_smoothing"))
-    {
-        new_odf_buffer.resize(half_odf);
-        std::copy(odf_buffer,odf_buffer+half_odf,new_odf_buffer.begin());
-        std::vector<image::vector<3,unsigned short> >& odf_faces =
-                handle->fib_data.fib.odf_faces;
-        for(int index = 0;index < odf_faces.size();++index)
-        {
-            unsigned short f1 = odf_faces[index][0];
-            unsigned short f2 = odf_faces[index][1];
-            unsigned short f3 = odf_faces[index][2];
-            if(f1 >= half_odf)
-                f1 -= half_odf;
-            if(f2 >= half_odf)
-                f2 -= half_odf;
-            if(f3 >= half_odf)
-                f3 -= half_odf;
-            float sum = odf_buffer[f1]+odf_buffer[f2]+odf_buffer[f3];
-            sum *= 0.1;
-            if(odf_buffer[f1] == 0.0)
-                new_odf_buffer[f1] = std::max(sum,new_odf_buffer[f1]);
-            if(odf_buffer[f2] == 0.0)
-                new_odf_buffer[f2] = std::max(sum,new_odf_buffer[f2]);
-            if(odf_buffer[f3] == 0.0)
-                new_odf_buffer[f3] = std::max(sum,new_odf_buffer[f3]);
-        }
-        odf_buffer = &new_odf_buffer[0];
-    }
-
-
     float odf_min = *std::min_element(odf_buffer,odf_buffer+half_odf);
     for(unsigned int index = 0;index < half_odf;++index,++iter)
     {
@@ -1329,13 +1290,6 @@ bool GLWidget::addSlices(QStringList filenames)
     return true;
 }
 
-void GLWidget::delete_slice(int index)
-{
-    other_slices.erase(other_slices.begin()+index);
-    mi3s.erase(mi3s.begin()+index);
-    transform.erase(transform.begin()+index);
-}
-
 void GLWidget::addSurface(void)
 {
     SliceModel* active_slice = current_visible_slide ?
@@ -1412,6 +1366,65 @@ void GLWidget::addSurface(void)
     }
 }
 
+void GLWidget::stripSkull(void)
+{
+    SliceModel* active_slice = current_visible_slide ?
+                               (SliceModel*)&other_slices[current_visible_slide-1] :
+                               (SliceModel*)&cur_tracking_window.slice;
+
+    float threshold = image::segmentation::otsu_threshold(active_slice->get_source());
+    bool ok;
+    threshold = QInputDialog::getDouble(this,
+        "DSI Studio","Threshold:", threshold,
+        *std::min_element(active_slice->get_source().begin(),active_slice->get_source().end()),
+        *std::max_element(active_slice->get_source().begin(),active_slice->get_source().end()),
+        4, &ok);
+    if (!ok)
+        return;
+
+    {
+
+    // strip skull
+    image::basic_image<unsigned char,3> binary;
+    image::threshold(active_slice->get_source(),binary,threshold*2);
+    image::morphology::smoothing(binary);
+    image::morphology::defragment(binary);
+
+    image::morphology::dilation(binary);
+    image::morphology::smoothing(binary);
+    image::morphology::dilation(binary);
+    image::morphology::smoothing(binary);
+    image::morphology::dilation(binary);
+    image::morphology::smoothing(binary);
+    image::morphology::dilation(binary);
+    image::morphology::smoothing(binary);
+    image::morphology::dilation(binary);
+    image::morphology::smoothing(binary);
+
+    image::basic_image<float,3> modified(active_slice->get_source());
+    for(unsigned int index = 0;index < modified.size();++index)
+        if(binary[index])
+            modified[index] = 0;
+    surface.reset(new RegionModel);
+    if(!surface->load(modified,threshold))
+    {
+        surface.reset(0);
+        return;
+    }
+
+    }
+
+    if(current_visible_slide)
+    for(unsigned int index = 0;index < surface->get()->point_list.size();++index)
+    {
+        image::vector<3,float> tmp;
+        image::vector_transformation(
+            surface->get()->point_list[index].begin(), tmp.begin(),
+            transform[current_visible_slide-1].begin(), image::vdim<3>());
+        tmp += 0.5;
+        surface->get()->point_list[index] = tmp;
+    }
+}
 void GLWidget::copyToClipboard(void)
 {
     updateGL();
@@ -1435,21 +1448,23 @@ void GLWidget::saveRotationSeries(void)
 {
     QString filename = QFileDialog::getSaveFileName(
             this,
-            "Assign image name",
+            "Save Images files",
             cur_tracking_window.absolute_path,
             "BMP files (*.bmp);;PNG files (*.png );;JPEG File (*.jpg);;TIFF File (*.tif);;All files (*.*)");
     if(filename.isEmpty())
         return;
     bool ok;
-    int angle = QInputDialog::getInteger(this,
-        "DSI Studio","Rotation angle in each step (degrees):",10,1,360,5,&ok);
+    int frames = QInputDialog::getInteger(this,
+        "DSI Studio","Threshold:", 360,
+        60,
+        1800,60,&ok);
     if(!ok)
         return;
     makeCurrent();
     std::vector<float> m(transformation_matrix,transformation_matrix+16);
     begin_prog("save images");
     ::can_cancel(true);
-    for(unsigned int index = 0;check_prog(index,360);index += angle)
+    for(unsigned int index = 0;check_prog(index,frames);++index)
     {
         glPushMatrix();
         glLoadIdentity();
@@ -1457,7 +1472,7 @@ void GLWidget::saveRotationSeries(void)
         glTranslatef(cur_tracking_window.slice.center_point[0],
                      cur_tracking_window.slice.center_point[1],
                      cur_tracking_window.slice.center_point[2]);
-        glRotated(angle, 0.0, 0.0, 1.0);
+        glRotated(360.0/(float)frames, 0.0, 0.0, 1.0);
         glTranslatef(-cur_tracking_window.slice.center_point[0],
                      -cur_tracking_window.slice.center_point[1],
                      -cur_tracking_window.slice.center_point[2]);

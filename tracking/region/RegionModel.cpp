@@ -119,6 +119,9 @@ bool RegionModel::load(const image::basic_image<float, 3>& image_,
 {
     image::basic_image<float, 3>image_buffer(image_);
 
+    //image::filter::anisotropic_diffusion(image_buffer);
+    //image::filter::gaussian(image_buffer);
+
     if (threshold == 0.0)
     {
         float sum = 0;

@@ -56,9 +56,8 @@ public:
 public:
     boost::ptr_vector<TrackingMethod> method;
     std::auto_ptr<boost::thread_group> threads;
-    unsigned int thread_count;
     bool joinning;
-    boost::mutex lock_feed_function, lock_seed_function, lock_tract_function;
+    boost::mutex lock_feed_function, lock_seed_function;
 private:
     std::vector<std::vector<float> > track_buffer;
     void push_tracts(std::vector<std::vector<float> >& local_tract_buffer)
@@ -95,24 +94,19 @@ private:
     boost::uniform_real<float> uniform_rand;
     boost::variate_generator<boost::mt19937&, boost::uniform_real<float> > rand_gen;
 public:
-    void run_thread(unsigned int thread_id)
+    void run_thread(unsigned int thread_id,ODFModel* handle)
     {
         if(seeds.empty())
             return;
         try{
             std::vector<std::vector<float> > local_track_buffer;
-            for (unsigned int iteration = thread_id;!joinning && !is_ended();iteration+=thread_count)
+            for (unsigned int iteration = 0;!joinning;++iteration)
             {
                 float pos[3];
                 if(center_seed)
                 {
-                    {
-                        boost::mutex::scoped_lock lock(lock_seed_function);
-                        if(iteration >= seeds.size() ||
-                           !stop_by_track && total_seedings >= termination_count)
-                            break;
-                        ++total_seedings;
-                    }
+                    if(iteration >= seeds.size())
+                        break;
                     pos[0] = seeds[iteration].x();
                     pos[1] = seeds[iteration].y();
                     pos[2] = seeds[iteration].z();
@@ -120,33 +114,25 @@ public:
                 else
                 {
                     // to ensure the consistency
-                    {
-                        boost::mutex::scoped_lock lock(lock_seed_function);
-                        if(!stop_by_track && total_seedings >= termination_count)
-                            break;
-                        ++total_seedings;
-                    }
+                    boost::mutex::scoped_lock lock(lock_seed_function);
                     unsigned int i = rand_gen()*((float)seeds.size()-1.0);
                     pos[0] = (float)seeds[i].x() + rand_gen()-0.5;
                     pos[1] = (float)seeds[i].y() + rand_gen()-0.5;
                     pos[2] = (float)seeds[i].z() + rand_gen()-0.5;
                 }
-
                 {
                     unsigned int point_count;
                     const float *result = method[thread_id].tracking(pos,point_count);
+                    if (is_ended())
+                        break;
+                    ++total_seedings;
                     if (result && point_count)
                     {
-                        {
-                            boost::mutex::scoped_lock lock(lock_tract_function);
-                            if(stop_by_track && total_tracks >= termination_count)
-                                break;
-                            ++total_tracks;
-                        }
+                        ++total_tracks;
                         local_track_buffer.push_back(std::vector<float>(result,result+point_count+point_count+point_count));
                     }
                 }
-                if((iteration & 0x00000FFF) == 0x00000FFF && !local_track_buffer.empty())
+                if((iteration & 0x000000FF) == 0x000000FF && !local_track_buffer.empty())
                     push_tracts(local_track_buffer);
             }
             push_tracts(local_track_buffer);
@@ -160,8 +146,6 @@ public:
 
     bool is_ended(void)
     {
-        if(center_seed && total_seedings >= seeds.size())
-            return true;
         if (stop_by_track)
         {
             if (total_tracks >= termination_count)
@@ -234,25 +218,23 @@ public:
             new TrackingInfo(handle->fib_data,param,interpo_method.release()),roi_mgr,param));
     }
 
-    void run(unsigned int thread_count_)
+    void run(unsigned int thread_count)
     {
-        thread_count = thread_count_;
         method.clear();
         threads.reset(new boost::thread_group);
         for (unsigned int index = 0;index < thread_count;++index)
         {
             add_new_method();
-            threads->add_thread(new boost::thread(&ThreadData::run_thread,this,index));
+            threads->add_thread(new boost::thread(&ThreadData::run_thread,this,index,handle));
         }
     }
-    void run_until_terminate(unsigned int thread_count_)
+    void run_until_terminate(unsigned int thread_count)
     {
-        thread_count = thread_count_;
         method.clear();
         if(thread_count > 1)
             run(thread_count-1);
         add_new_method();
-        run_thread(method.size()-1);
+        run_thread(method.size()-1,handle);
         if(threads.get())
             threads->join_all();
     }

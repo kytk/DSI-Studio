@@ -14,7 +14,8 @@ struct EstimateResponseFunction : public BaseProcess
 public:
     virtual void init(Voxel& voxel)
     {
-        lm.init();
+        process_position = __FUNCTION__;
+		lm.init();
 		decomposition.icosa_components.resize(ti_vertices_count() >> 1);
                 for(unsigned int index = 0;index < ti_vertices_count() >> 1;++index)
 			decomposition.icosa_components[index].initialize(index);
@@ -26,6 +27,7 @@ public:
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
+		process_position = __FUNCTION__;
         lm.search(data.odf);
         if(lm.max_table.size() > 1)
 			return;
@@ -49,8 +51,8 @@ struct EstimateResponseFunction : public BaseProcess
 public:
     virtual void init(Voxel& voxel)
     {
-
-        voxel.response_function.resize(voxel.ti.half_vertices_count);
+        process_position = __FUNCTION__;
+        voxel.response_function.resize(ti_vertices_count()/2);
         voxel.reponse_function_scaling = 0;
         max_value = 0;
         std::fill(voxel.response_function.begin(),voxel.response_function.end(),1.0);
@@ -58,13 +60,13 @@ public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
         boost::mutex::scoped_lock lock(mutex);
-
+        process_position = __FUNCTION__;
         float max_diffusion_value = std::accumulate(data.odf.begin(),data.odf.end(),0.0)/data.odf.size();
         if (max_diffusion_value > voxel.reponse_function_scaling)
 		{
 			voxel.reponse_function_scaling = max_diffusion_value;
 			voxel.free_water_diffusion = data.odf;
-        }
+		}
 		float cur_value = data.fa[0]-data.fa[1]-data.fa[2];
         if (cur_value < max_value)
             return;
@@ -119,14 +121,14 @@ protected:
         {
             unsigned int max_index = std::max_element(voxel.response_function.begin(),voxel.response_function.end())-voxel.response_function.begin();
             for (unsigned int index = 0; index < inner_angles.size(); ++index)
-                inner_angles[index] = inner_angle(voxel.ti.vertices_cos(index,max_index));
+                inner_angles[index] = inner_angle(::ti_vertices_cos(index,max_index));
         }
 
 
         Rt.resize(half_odf_size*half_odf_size);
         for (unsigned int i = 0,index = 0; i < half_odf_size; ++i)
             for (unsigned int j = 0; j < half_odf_size; ++j,++index)
-                Rt[index] = kernel_regression(voxel.response_function,inner_angles,inner_angle(voxel.ti.vertices_cos(i,j)),9.0/180.0*M_PI);
+                Rt[index] = kernel_regression(voxel.response_function,inner_angles,inner_angle(::ti_vertices_cos(i,j)),9.0/180.0*M_PI);
     }
 
 	void deconvolution(std::vector<float>& odf)
@@ -145,10 +147,10 @@ protected:
                 if (odf[index] < 0.0)
                     odf[index] = 0.0;
 	}
-    float dif_ratio(Voxel& voxel,const std::vector<float>& odf)
+	float dif_ratio(const std::vector<float>& odf)
 	{
 		SearchLocalMaximum local_max;
-        local_max.init(voxel);
+		local_max.init();
         local_max.search(odf);
         if (local_max.max_table.size() < 2)
             return 0.0;
@@ -157,18 +159,16 @@ protected:
         return second_value/first_value;
     }
 
-    void get_error_percentage(Voxel& voxel)
+    void get_error_percentage(std::vector<float> single_fiber_odf,std::vector<float> free_water_odf)
     {
-        std::vector<float> single_fiber_odf(voxel.response_function);
-        std::vector<float> free_water_odf(voxel.free_water_diffusion);
         deconvolution(single_fiber_odf);
-        remove_isotropic(single_fiber_odf);
-        sensitivity_error_percentage = dif_ratio(voxel,single_fiber_odf);
+		remove_isotropic(single_fiber_odf);
+		sensitivity_error_percentage = dif_ratio(single_fiber_odf);
 
-        deconvolution(free_water_odf);
-        remove_isotropic(free_water_odf);
+		deconvolution(free_water_odf);
+		remove_isotropic(free_water_odf);
                 specificity_error_percentage = image::mean(free_water_odf.begin(),free_water_odf.end())/
-                            (*std::max_element(single_fiber_odf.begin(),single_fiber_odf.end()));
+							(*std::max_element(single_fiber_odf.begin(),single_fiber_odf.end()));
 
 		
 	}
@@ -176,7 +176,7 @@ protected:
 public:
     virtual void init(Voxel& voxel)
     {
-
+        process_position = __FUNCTION__;
         if (!voxel.odf_deconvolusion)
             return;
 
@@ -187,7 +187,7 @@ public:
 		std::for_each(voxel.free_water_diffusion.begin(),voxel.free_water_diffusion.end(),(boost::lambda::_1 /= voxel.reponse_function_scaling));
         
 
-        half_odf_size = voxel.ti.half_vertices_count;
+        half_odf_size = ti_vertices_count()/2;
         iteration = std::floor(voxel.param[3]+0.5);
         estimate_Rt(voxel);
 
@@ -201,7 +201,7 @@ public:
             A[index] += voxel.param[2];
         math::matrix_lu_decomposition(A.begin(),pv.begin(),math::dyndim(half_odf_size,half_odf_size));
 
-        get_error_percentage(voxel);
+		get_error_percentage(voxel.response_function,voxel.free_water_diffusion);
 		
     }
 
@@ -214,6 +214,26 @@ public:
         std::for_each(data.odf.begin(),data.odf.end(),(boost::lambda::_1 /= voxel.reponse_function_scaling));
         
 		deconvolution(data.odf);
+        
+        if (voxel.odf_deconvolusion_iterative)
+        {	/*
+            for (unsigned int index = 0;index < iteration;++index)
+            {
+                for (unsigned int index = 0; index < data.odf.size(); ++index)
+                    if (data.odf[index] < 0)
+                        data.odf[index] = 0;
+
+                std::vector<float> A_(AA);
+                std::vector<unsigned int> pv_(pv.size());
+
+                float scale = std::accumulate(data.odf.begin(),data.odf.end(),0.0);
+                scale /= half_odf_size;
+                for (unsigned int i = 0,index = 0; i < half_odf_size; ++i,index += half_odf_size + 1)
+                    A_[index] += voxel.param[2]/(0.00001+data.odf[i]/scale)*(0.00001+data.odf[i]/scale);
+                math::matrix_lu_decomposition(&*A_.begin(),&*pv_.begin(),math::dyndim(half_odf_size,half_odf_size));
+                math::matrix_lu_solve(&*A_.begin(),&*pv_.begin(),&*original_odf.begin(),&*data.odf.begin(),math::dyndim(data.odf.size(),data.odf.size()));
+            }*/
+        }
 
 		remove_isotropic(data.odf);
     }
@@ -281,7 +301,7 @@ public:
         if (!voxel.odf_compress_sensing)
             return;
 
-
+        process_position = __FUNCTION__;
         std::for_each(voxel.response_function.begin(),voxel.response_function.end(),boost::lambda::_1 /= voxel.reponse_function_scaling);
         half_odf_size = ti_vertices_count()/2;
         estimate_Rt(voxel);

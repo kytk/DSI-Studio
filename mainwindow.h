@@ -22,7 +22,7 @@ public:
     void addSrc(QString Filename);
 private:
     void loadFib(QString Filename);
-    void loadSrc(QStringList filenames);
+    void loadSrc(QString Filename);
 private slots:
     void on_suprathreshold_clicked();
     void on_averagefib_clicked();

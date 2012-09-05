@@ -264,18 +264,14 @@ bool TractModel::save_tracts_to_file(const char* file_name_)
     return false;
 }
 //---------------------------------------------------------------------------
-bool TractModel::save_transformed_tracts_to_file(const char* file_name,const float* transform,bool end_point)
+bool TractModel::save_transformed_tracts_to_file(const char* file_name,const float* transform)
 {
     std::vector<std::vector<float> > new_tract_data(tract_data);
     for(unsigned int i = 0;i < tract_data.size();++i)
         for(unsigned int j = 0;j < tract_data[i].size();j += 3)
         image::vector_transformation(&(new_tract_data[i][j]),
                                     &(tract_data[i][j]),transform,image::vdim<3>());
-    bool result = true;
-    if(end_point)
-        save_end_points(file_name);
-    else
-        result = save_tracts_to_file(file_name);
+    bool result = save_tracts_to_file(file_name);
     new_tract_data.swap(tract_data);
     return result;
 }
@@ -352,7 +348,7 @@ void TractModel::save_end_points(const char* file_name_) const
         std::ofstream out(file_name_,std::ios::out);
         if (!out)
             return;
-        std::copy(buffer.begin(),buffer.end(),std::ostream_iterator<float>(out," "));
+        std::copy(buffer.begin(),buffer.end(),std::ostream_iterator<int>(out," "));
     }
     if (file_name.find(".mat") != std::string::npos)
     {

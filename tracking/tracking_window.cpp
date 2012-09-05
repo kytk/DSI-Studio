@@ -56,7 +56,10 @@ tracking_window::tracking_window(QWidget *parent,ODFModel* new_handle) :
         view_name.push_back(fib_data.view_item[index].name);
     is_dti = (view_name[0][0] == 'f');
 
+
+
     ui->setupUi(this);
+    // recall the setting
     {
         setGeometry(10,10,800,600);
         ui->regionDockWidget->setMinimumWidth(0);
@@ -69,21 +72,62 @@ tracking_window::tracking_window(QWidget *parent,ODFModel* new_handle) :
         ui->tractverticalLayout->addWidget(tractWidget = new TractTableWidget(*this,ui->TractWidgetHolder));
         ui->color_bar->hide();
         ui->dockWidget_report->hide();
-        ui->graphicsView->setScene(&scene);
-        ui->color_bar_view->setScene(&color_bar);
-        ui->graphicsView->setCursor(Qt::CrossCursor);
-        scene.statusbar = ui->statusbar;
+
     }
 
+    {
+
+        QSettings settings;
+        if(!default_geo.size())
+            default_geo = saveGeometry();
+        if(!default_state.size())
+            default_state = saveState();
+        restoreGeometry(settings.value("geometry").toByteArray());
+        restoreState(settings.value("state").toByteArray());
+
+        ui->turning_angle->setValue(settings.value("turning_angle",60).toDouble());
+        ui->smoothing->setValue(settings.value("smoothing",0.0).toDouble());
+        ui->min_length->setValue(settings.value("min_length",0.0).toDouble());
+        ui->max_length->setValue(settings.value("max_length",500).toDouble());
+        ui->tracking_method->setCurrentIndex(settings.value("tracking_method",0).toInt());
+        ui->seed_plan->setCurrentIndex(settings.value("seed_plan",0).toInt());
+        ui->initial_direction->setCurrentIndex(settings.value("initial_direction",1).toInt());
+        ui->interpolation->setCurrentIndex(settings.value("interpolation",0).toInt());
+        ui->tracking_plan->setCurrentIndex(settings.value("tracking_plan",0).toInt());
+        ui->track_count->setValue(settings.value("track_count",2000).toInt());
+        ui->thread_count->setCurrentIndex(settings.value("thread_count",0).toInt());
+
+        ui->glSagCheck->setChecked(settings.value("SagSlice",1).toBool());
+        ui->glCorCheck->setChecked(settings.value("CorSlice",1).toBool());
+        ui->glAxiCheck->setChecked(settings.value("AxiSlice",1).toBool());
+        ui->RenderingQualityBox->setCurrentIndex(settings.value("RenderingQuality",1).toInt());
+
+        ui->color_from->setColor(settings.value("color_from",0x00FF1010).toInt());
+        ui->color_to->setColor(settings.value("color_to",0x00FFFF10).toInt());
+    }
 
     // setup fa threshold
     {
-        for(int index = 0;index < fib_data.fib.index_name.size();++index)
-            ui->tracking_index->addItem((fib_data.fib.index_name[index]+" threshold").c_str());
-        ui->tracking_index->setCurrentIndex(0);
+        float max_value = *std::max_element(slice.source_images.begin(),slice.source_images.end());
+        ui->fa_threshold->setRange(0.0,max_value*1.1);
+        if(fib_data.fib.getFAThreshold() != 0.0)
+            ui->fa_threshold->setValue(fib_data.fib.getFAThreshold());
+        else
+            ui->fa_threshold->setValue(0.8*image::segmentation::otsu_threshold(slice.source_images));
+        ui->fa_threshold->setSingleStep(max_value/50.0);
+
         ui->step_size->setValue(fib_data.vs[0]/2.0);
     }
 
+
+
+    //setup scene
+    {
+        ui->graphicsView->setCursor(Qt::CrossCursor);
+        ui->graphicsView->setScene(&scene);
+        ui->color_bar_view->setScene(&color_bar);
+        scene.statusbar = ui->statusbar;
+    }
     // setup sliders
     {
         slice_no_update = true;
@@ -192,7 +236,7 @@ tracking_window::tracking_window(QWidget *parent,ODFModel* new_handle) :
         connect(ui->contrast,SIGNAL(valueChanged(int)),&scene,SLOT(show_slice()));
         connect(ui->offset,SIGNAL(valueChanged(int)),&scene,SLOT(show_slice()));
         connect(ui->show_fiber,SIGNAL(clicked()),&scene,SLOT(show_slice()));
-        connect(ui->show_pos,SIGNAL(clicked()),&scene,SLOT(show_slice()));
+
 
         connect(ui->zoomIn,SIGNAL(clicked()),&scene,SLOT(zoom_in()));
         connect(ui->zoomOut,SIGNAL(clicked()),&scene,SLOT(zoom_out()));
@@ -321,37 +365,6 @@ tracking_window::tracking_window(QWidget *parent,ODFModel* new_handle) :
         scene.center();
         slice_no_update = false;
         copy_target = 0;
-    }
-
-    // recall the setting
-    {
-
-        QSettings settings;
-        if(!default_geo.size())
-            default_geo = saveGeometry();
-        if(!default_state.size())
-            default_state = saveState();
-        restoreGeometry(settings.value("geometry").toByteArray());
-        restoreState(settings.value("state").toByteArray());
-        ui->turning_angle->setValue(settings.value("turning_angle",60).toDouble());
-        ui->smoothing->setValue(settings.value("smoothing",0.0).toDouble());
-        ui->min_length->setValue(settings.value("min_length",0.0).toDouble());
-        ui->max_length->setValue(settings.value("max_length",500).toDouble());
-        ui->tracking_method->setCurrentIndex(settings.value("tracking_method",0).toInt());
-        ui->seed_plan->setCurrentIndex(settings.value("seed_plan",0).toInt());
-        ui->initial_direction->setCurrentIndex(settings.value("initial_direction",1).toInt());
-        ui->interpolation->setCurrentIndex(settings.value("interpolation",0).toInt());
-        ui->tracking_plan->setCurrentIndex(settings.value("tracking_plan",0).toInt());
-        ui->track_count->setValue(settings.value("track_count",2000).toInt());
-        ui->thread_count->setCurrentIndex(settings.value("thread_count",0).toInt());
-
-        ui->glSagCheck->setChecked(settings.value("SagSlice",1).toBool());
-        ui->glCorCheck->setChecked(settings.value("CorSlice",1).toBool());
-        ui->glAxiCheck->setChecked(settings.value("AxiSlice",1).toBool());
-        ui->RenderingQualityBox->setCurrentIndex(settings.value("RenderingQuality",1).toInt());
-
-        ui->color_from->setColor(settings.value("color_from",0x00FF1010).toInt());
-        ui->color_to->setColor(settings.value("color_to",0x00FFFF10).toInt());
     }
 
     qApp->installEventFilter(this);
@@ -681,8 +694,6 @@ void tracking_window::on_actionInsert_T1_T2_triggered()
     ui->SliceModality->setCurrentIndex(glWidget->other_slices.size());
 }
 
-
-
 void tracking_window::on_actionStatistics_triggered()
 {
     tractWidget->showCurTractStatistics(
@@ -752,15 +763,6 @@ void tracking_window::on_actionSave_Tracts_in_Current_Mapping_triggered()
     image::vector<3,float> vs;
     glWidget->get_current_slice_transformation(geo,vs,tr);
     tractWidget->saveTransformedTracts(&*tr.begin());
-}
-void tracking_window::on_actionSave_Endpoints_in_Current_Mapping_triggered()
-{
-
-    std::vector<float> tr(16);
-    image::geometry<3> geo;
-    image::vector<3,float> vs;
-    glWidget->get_current_slice_transformation(geo,vs,tr);
-    tractWidget->saveTransformedEndpoints(&*tr.begin());
 }
 
 void tracking_window::on_RenderingQualityBox_currentIndexChanged(int index)
@@ -1080,25 +1082,4 @@ void tracking_window::on_save_report_clicked()
         if(!has_output)
             break;
     }
-}
-
-void tracking_window::on_tracking_index_currentIndexChanged(int index)
-{
-    handle->fib_data.fib.set_tracking_index(index);
-    float max_value = *std::max_element(handle->fib_data.fib.fa[0],handle->fib_data.fib.fa[0]+handle->fib_data.fib.dim.size());
-    ui->fa_threshold->setRange(0.0,max_value*1.1);
-    ui->fa_threshold->setValue(0.8*image::segmentation::otsu_threshold(
-        image::basic_image<float, 3,image::const_pointer_memory<float> >(handle->fib_data.fib.fa[0],handle->fib_data.fib.dim)));
-    ui->fa_threshold->setSingleStep(max_value/50.0);
-}
-
-
-void tracking_window::on_deleteSlice_clicked()
-{
-    if(ui->SliceModality->currentIndex() == 0)
-        return;
-    int index = ui->SliceModality->currentIndex();
-    ui->SliceModality->setCurrentIndex(0);
-    glWidget->delete_slice(index-1);
-    ui->SliceModality->removeItem(index);
 }

@@ -272,7 +272,7 @@ void VBCDialog::show_distribution(void)
     static unsigned int cur_prog = 0;
     if(vbc_instance->cur_prog != cur_prog)
     {
-        unsigned int resolution = 20;
+        unsigned int resolution = std::max((unsigned int)10,cur_prog/10);
         std::vector<unsigned int> hist1,hist2;
         std::vector<unsigned int> max_cluster_size(vbc_instance->get_max_cluster_size());
         std::vector<float> max_statistics(vbc_instance->get_max_statistics());

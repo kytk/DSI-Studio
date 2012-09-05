@@ -2,7 +2,7 @@
 #define GAUSSIAN_FITTING_HPP
 #include <vector>
 #include <cmath>
-#include "tessellated_icosahedron.hpp"
+#include "odf_fem_interface.h"
 #include "math/root.hpp"
 #include "odf_decomposition.hpp"
 
@@ -13,16 +13,16 @@ private:
 public:
     virtual void init(Voxel& voxel)
     {
-
+        process_position = __FUNCTION__;
         SaveFiberInfo::init(voxel);
-        odf_component.icosa_components.resize(voxel.ti.half_vertices_count);
-        for(unsigned int index = 0; index < voxel.ti.half_vertices_count; ++index)
+        odf_component.icosa_components.resize(ti_vertices_count() >> 1);
+        for(unsigned int index = 0; index < ti_vertices_count() >> 1; ++index)
             odf_component.icosa_components[index].initialize(index);
     }
 
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-
+        process_position = __FUNCTION__;
         std::vector<float> odf(data.odf);
         float min_odf = RemoveIsotropicPart()(odf);
 

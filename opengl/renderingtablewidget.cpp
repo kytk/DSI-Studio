@@ -564,7 +564,6 @@ void RenderingTableWidget::initialize(void)
                                                       QStringList()
                                                       << QString("0.5")
                                                       << QString("1")
-                                                      << QString("1.5")
                                                       << QString("2")
                                                       << QString("4")
                                                       << QString("8")
@@ -576,12 +575,6 @@ void RenderingTableWidget::initialize(void)
                                                       << QString("none")
                                                       << QString("2")
                                                       << QString("4"),0));
-
-        openPersistentEditor(treemodel->addItem(TreeModel::odfItem,
-        "odf_smoothing",QString("Smoothing"),
-                                                      QStringList()
-                                                      << QString("off")
-                                                      << QString("on"),0));
     }
 }
 void RenderingTableWidget::setData(const char* name,QVariant data)

@@ -120,6 +120,7 @@ public:
 public:
     virtual void init(Voxel& voxel)
     {
+        process_position = __FUNCTION__;
         unsigned int n = voxel.bvalues.size();
         qspace_mapping1.resize(n);
         qspace_mapping2.resize(n);
@@ -144,6 +145,7 @@ public:
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
+        process_position = __FUNCTION__;
         std::vector<float> pdf(qspace_size);
         for (unsigned int index = 0; index < qspace_mapping1.size(); ++index)
         {
@@ -173,18 +175,20 @@ struct Pdf2Odf : public BaseProcess
 public:
     virtual void init(Voxel& voxel)
     {
+        process_position = __FUNCTION__;
         // initialize dsi sample points
-        unsigned int odf_size = voxel.ti.half_vertices_count;
+        unsigned int odf_size = voxel.full_odf_dimension >> 1;
         for (unsigned int index = 0; index < odf_size; ++index)
             for (float r = odf_min_radius; r <= odf_max_radius; r += odf_sampling_interval)
                 sample_group.push_back(
-                    SamplePoint(index,voxel.ti.vertices[index][0]*r,
-                                voxel.ti.vertices[index][1]*r,
-                                voxel.ti.vertices[index][2]*r,r*r));
+                    SamplePoint(index,ti_vertices(index)[0]*r,
+                                ti_vertices(index)[1]*r,
+                                ti_vertices(index)[2]*r,r*r));
         b0_index = SpaceMapping<dsi_range>::getIndex(0,0,0);
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
+        process_position = __FUNCTION__;
         // calculate sum(p(u*r)*r^2)dr
         using namespace boost::lambda;
         std::fill(data.odf.begin(),data.odf.end(),0.0f);

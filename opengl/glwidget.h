@@ -30,7 +30,6 @@ class RenderingTableWidget;
      std::vector<std::vector<float> > transform;
      unsigned int current_visible_slide;
      bool addSlices(QStringList filenames);
-     void delete_slice(int index);
      const image::geometry<3>& getCurrentGeo(void) const
      {return other_slices[current_visible_slide-1].geometry;}
      void get_current_slice_transformation(image::geometry<3>& geo,
@@ -49,6 +48,7 @@ class RenderingTableWidget;
  public slots:
      void makeTracts(void);
      void addSurface(void);
+     void stripSkull(void);
      void catchScreen(void);
      void saveCamera(void);
      void loadCamera(void);

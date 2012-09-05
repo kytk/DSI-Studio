@@ -34,7 +34,6 @@ public:
                               image::vector<3,float> vs,
                               std::vector<float>& transformation,bool color,bool endpoint);
     void saveTransformedTracts(const float* transform);
-    void saveTransformedEndpoints(const float* transform);
 signals:
     void need_update(void);
 private:

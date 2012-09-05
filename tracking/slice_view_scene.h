@@ -11,7 +11,7 @@ class slice_view_scene : public QGraphicsScene
     Q_OBJECT
 public:
     slice_view_scene(tracking_window& cur_tracking_window_,ODFModel* handle_):
-        display_ratio(8.0),sel_mode(0),mid_down(false),
+            display_ratio(8.0),sel_mode(0),
             cur_tracking_window(cur_tracking_window_),
             handle(handle_),statusbar(0)
     {
@@ -30,7 +30,6 @@ private:
     // record the mouse press points
     std::vector<image::vector<3,short> >sel_coord;
     std::vector<image::vector<2,short> >sel_point;
-    int cur_region;
     bool mouse_down;
     bool mid_down;
     int cX, cY;

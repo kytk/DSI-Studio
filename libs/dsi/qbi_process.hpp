@@ -4,7 +4,6 @@
 #include <cmath>
 #include "math/matrix_op.hpp"
 #include "common.hpp"
-#include "tessellated_icosahedron.hpp"
 
 struct CheckHARDI
 {
@@ -38,12 +37,12 @@ struct QBIReconstruction : public BaseProcess
 public:
     virtual void init(Voxel& voxel)
     {
-
-        half_odf_size = voxel.ti.half_vertices_count;
+        process_position = __FUNCTION__;
+        half_odf_size = voxel.full_odf_dimension >> 1;
         unsigned int b_count = voxel.q_count;
         icosa_data.resize(half_odf_size*3);
         for (unsigned int index = 0; index < half_odf_size; ++index)
-            std::copy(voxel.ti.vertices[index].begin(),voxel.ti.vertices[index].end(),icosa_data.begin()+index*3);
+            std::copy(ti_vertices(index),ti_vertices(index)+3,icosa_data.begin()+index*3);
 
         float interop_angle = voxel.param[0]/180.0*M_PI;
         float smoothing_angle = voxel.param[1]/180.0*M_PI;
@@ -54,7 +53,7 @@ public:
             for (unsigned int m = 0; m < b_count; ++m,++index)
             {
                 float value = std::abs(
-                                  voxel.bvectors[m]*image::vector<3,float>(voxel.ti.vertices[n]));
+                                  voxel.bvectors[m]*image::vector<3,float>(ti_vertices(n)));
                 Ht[index] = spherical_guassian(value,interop_angle);
             }
         iHtH.resize(half_odf_size*half_odf_size);
@@ -77,7 +76,7 @@ public:
         std::vector<float> icosa_data_r(half_odf_size*3);
         for (unsigned int gi = 0; gi < half_odf_size; ++gi)
         {
-            image::vector<3,float> u(voxel.ti.vertices[gi]);
+            image::vector<3,float> u(ti_vertices(gi));
             float r[9];// a 3-by-3 matrix
             rotation_matrix(r,u.begin());
             std::vector<float> Gt(half_odf_size*k); // a half_odf_size-by-k matrix
@@ -101,7 +100,7 @@ public:
             float sum = 0.0;
             for (unsigned int j = 0,index = i*half_odf_size; j < half_odf_size; ++j,++index)
                 sum +=
-                    S[index] = spherical_guassian(std::abs(voxel.ti.vertices_cos(i,j)),smoothing_angle);
+                    S[index] = spherical_guassian(std::abs(ti_vertices_cos(i,j)),smoothing_angle);
 
             for (unsigned int j = 0,index = i*half_odf_size; j < half_odf_size; ++j,++index)
                 S[index] /= sum;
@@ -114,7 +113,7 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-
+        process_position = __FUNCTION__;
 
         // Ht_s = Ht * signal
         std::vector<float> Ht_s(half_odf_size);

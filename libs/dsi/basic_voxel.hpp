@@ -7,7 +7,6 @@
 #include <boost/ptr_container/ptr_vector.hpp>
 #include <image/image.hpp>
 #include <string>
-#include "tessellated_icosahedron.hpp"
 
 
 
@@ -60,25 +59,23 @@ public:
     unsigned int q_count;
     std::vector<image::vector<3,float> > bvectors;
     std::vector<float> bvalues;
-public:// parameters;
-    tessellated_icosahedron ti;
+
+    unsigned int full_odf_dimension;
+    unsigned int max_fiber_number;
     const float* param;
     bool need_odf;
+    bool gfa_as_threshold;
     bool odf_deconvolusion;
+    bool odf_deconvolusion_iterative;
     bool odf_decomposition;
     bool half_sphere;
-    bool r2_weighted;// used in GQI only
-    unsigned int max_fiber_number;
-    std::vector<std::string> file_list;
-public:
+
     float qa_scaling;
+
     // other information for second pass processing
     std::vector<float> response_function,free_water_diffusion;
     image::basic_image<float,3> qa_map;
     float reponse_function_scaling;
-public:// for template creation
-    std::vector<std::vector<float> > template_odfs;
-    std::string template_file_name;
 private:
     std::vector<VoxelData> voxel_data;
 public:
@@ -99,11 +96,12 @@ public:
 public:
     void init(unsigned int thread_count)
     {
+        process_position = __FUNCTION__;
         voxel_data.resize(thread_count);
         for (unsigned int index = 0; index < thread_count; ++index)
         {
             voxel_data[index].space.resize(q_count);
-            voxel_data[index].odf.resize(ti.half_vertices_count);
+            voxel_data[index].odf.resize(full_odf_dimension >> 1);
             voxel_data[index].fa.resize(max_fiber_number);
             voxel_data[index].dir_index.resize(max_fiber_number);
             voxel_data[index].dir.resize(max_fiber_number);
@@ -116,12 +114,15 @@ public:
                     const std::vector<unsigned char>& mask,
                     bool& terminated)
     {
+        process_position = __FUNCTION__;
         unsigned int sum_mask = std::accumulate(mask.begin(),mask.end(),(unsigned int)0)/thread_count;
         unsigned int cur = 0;
         for(unsigned int voxel_index = thread_index;
-            voxel_index < total_size && !terminated &&
-            (thread_index != 0 || check_prog(cur,sum_mask));voxel_index += thread_count)
+            voxel_index < total_size && !terminated;voxel_index += thread_count)
         {
+            if(thread_index == 0)
+                check_prog(cur,sum_mask);// keep alive for saving output
+
             if (!mask[voxel_index])
                 continue;
             cur += mask[voxel_index];

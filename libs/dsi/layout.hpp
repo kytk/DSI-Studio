@@ -1,7 +1,6 @@
 #ifndef LAYOUT_HPP
 #define LAYOUT_HPP
 #include <iterator>
-#include "tessellated_icosahedron.hpp"
 
 class Layout
 {
@@ -17,7 +16,6 @@ private:
         return rician_gen[signal/discrete_scale]();
     }
 private:
-    tessellated_icosahedron ti;
     short dim[3];
     std::vector<image::vector<3,float> > bvectors;
     std::vector<float> bvalues;
@@ -84,7 +82,7 @@ public:
         findex[1].resize(total_size);
 
 
-        unsigned int main_fiber_index = ti.discretize(1.0,0.0,0.0);
+        unsigned int main_fiber_index = ti_discretize(1.0,0.0,0.0);
 
         std::fill(models.begin(),models.end(),(MixGaussianModel*)0);
         begin_prog("creating layout");
@@ -117,7 +115,7 @@ public:
                                 fa[1][index] = 1.0-fraction;
                                 gfa[index] = fa_value;
                                 findex[0][index] = main_fiber_index;
-                                findex[1][index] = ti.discretize(std::cos(inner_angle),std::sin(inner_angle),0.0);
+                                findex[1][index] = ti_discretize(std::cos(inner_angle),std::sin(inner_angle),0.0);
                                 vf[1][index] = fiber_fraction*fraction;
                                 vf[2][index] = fiber_fraction*(1.0-fraction);
                                 vf[0][index] = 1.0-fiber_fraction;
@@ -176,11 +174,18 @@ public:
         }
         // output layout
         {
-            std::vector<float> float_data;
-            std::vector<short> short_data;
-            ti.save_to_buffer(float_data,short_data);
-            mat_layout.add_matrix("odf_vertices",&*float_data.begin(),3,ti.vertices_count);
-            mat_layout.add_matrix("odf_faces",&*short_data.begin(),3,ti.faces.size());
+            std::vector<float> float_data(ti_vertices_count()*3);
+            std::vector<short> short_data(ti_faces_count()*3);
+
+            // odf_vertices
+            set_title("odf_table");
+            for (unsigned int i = 0,index = 0; i < ti_vertices_count(); ++i,index += 3)
+                std::copy(ti_vertices(i),ti_vertices(i)+3,float_data.begin()+index);
+            mat_layout.add_matrix("odf_vertices",&*float_data.begin(),3,ti_vertices_count());
+            // odf_faces
+            for (unsigned int i = 0,index = 0; i < ti_faces_count(); ++i,index += 3)
+                std::copy(ti_faces(i),ti_faces(i)+3,short_data.begin()+index);
+            mat_layout.add_matrix("odf_faces",&*short_data.begin(),3,ti_faces_count());
 
             mat_layout.add_matrix("fa0",&*fa[0].begin(),1,fa[0].size());
             mat_layout.add_matrix("fa1",&*fa[1].begin(),1,fa[1].size());

@@ -11,7 +11,7 @@
 
 void slice_view_scene::show_fiber(QPainter& painter,float* dir, unsigned int x, unsigned int y)
 {
-    float r = display_ratio / 3;
+    float r = display_ratio / 2.5;
     float dx, dy;
     QPen pen(QColor(std::abs(dir[0]) * 255.0,std::abs(dir[1]) * 255.0, std::abs(dir[2]) * 255.0));
     pen.setWidthF(display_ratio/5.0);
@@ -76,22 +76,18 @@ void slice_view_scene::show_slice(void)
 
         }
 
-        if(cur_tracking_window.ui->show_pos->checkState() == Qt::Checked)
-        {
-            int x_pos,y_pos;
-            cur_tracking_window.slice.get_other_slice_pos(x_pos, y_pos);
-            painter.setPen(QColor(255,0,0));
-            painter.drawLine(((double)x_pos + 0.5)*display_ratio, 0,((double)x_pos + 0.5)*display_ratio,view_image.height());
-            painter.drawLine(0, ((double)y_pos + 0.5)*display_ratio,view_image.width(),((double)y_pos + 0.5)*display_ratio);
-        }
+        int x_pos,y_pos;
+        cur_tracking_window.slice.get_other_slice_pos(x_pos, y_pos);
+        painter.setPen(QColor(255,0,0));
+        painter.drawLine(((double)x_pos + 0.5)*display_ratio, 0,((double)x_pos + 0.5)*display_ratio,view_image.height());
+        painter.drawLine(0, ((double)y_pos + 0.5)*display_ratio,view_image.width(),((double)y_pos + 0.5)*display_ratio);
     }
     else
     {
-        unsigned int skip = cur_tracking_window.ui->view_style->currentIndex()-1;
-        mosaic_size = std::max((int)1,(int)std::ceil(std::sqrt((float)(cur_tracking_window.slice.geometry[2] >> skip))));
-        cur_tracking_window.slice.get_mosaic(mosaic_image,mosaic_size,contrast,offset,skip);
+        mosaic_size = std::ceil(std::sqrt((float)cur_tracking_window.slice.geometry[2]));
+        cur_tracking_window.slice.get_mosaic(mosaic_image,mosaic_size,contrast,offset);
         QImage qimage((unsigned char*)&*mosaic_image.begin(),mosaic_image.width(),mosaic_image.height(),QImage::Format_RGB32);
-        cur_tracking_window.regionWidget->draw_mosaic_region(qimage,mosaic_size,skip);
+        cur_tracking_window.regionWidget->draw_mosaic_region(qimage,mosaic_size);
         view_image = qimage.scaled(mosaic_image.width()*display_ratio/(float)mosaic_size,mosaic_image.height()*display_ratio/(float)mosaic_size);
     }
     setSceneRect(0, 0, view_image.width(),view_image.height());
@@ -99,15 +95,10 @@ void slice_view_scene::show_slice(void)
     setItemIndexMethod(QGraphicsScene::NoIndex);
     addRect(0, 0, view_image.width(),view_image.height(),QPen(),
             (cur_tracking_window.slice.cur_dim == 2 || cur_tracking_window.ui->view_style->currentIndex() != 0) ? view_image : view_image.mirrored());
-    // clear point buffer
-    sel_point.clear();
-    sel_coord.clear();
 }
 
 void slice_view_scene::save_slice_as()
 {
-    if( cur_tracking_window.ui->sliceViewBox->currentText() == "color")
-        return;
     QString filename = QFileDialog::getSaveFileName(
                 0,
                 "Save as",
@@ -116,17 +107,12 @@ void slice_view_scene::save_slice_as()
                 "NIFTI files (*.nii);;MAT File (*.mat);;");
     if(filename.isEmpty())
         return;
-
-    int index = cur_tracking_window.handle->get_name_index(
-                cur_tracking_window.ui->sliceViewBox->currentText().toLocal8Bit().begin());
-    if(index >= cur_tracking_window.handle->fib_data.view_item.size())
-        return;
-
+    /*
     if(QFileInfo(filename).completeSuffix().toLower() == "nii")
     {
         image::io::nifti file;
         file.set_voxel_size(cur_tracking_window.slice.voxel_size.begin());
-        image::basic_image<float,3> I(cur_tracking_window.handle->fib_data.view_item[index].image_data);
+        image::basic_image<float,3> I(cur_tracking_window.slice);
         image::flip_xy(I);
         file << I;
         file.save_to_file(filename.toLocal8Bit().begin());
@@ -134,10 +120,10 @@ void slice_view_scene::save_slice_as()
     if(QFileInfo(filename).completeSuffix().toLower() == "mat")
     {
         image::io::mat file;
-        file << cur_tracking_window.handle->fib_data.view_item[index].image_data;
+        file << cur_tracking_window.slice.cur_image;
         file.save_to_file(filename.toLocal8Bit().begin());
     }
-
+    */
 }
 
 void slice_view_scene::catch_screen()
@@ -184,18 +170,10 @@ void slice_view_scene::mousePressEvent ( QGraphicsSceneMouseEvent * mouseEvent )
     }
     cur_tracking_window.copy_target = 1;
     if(cur_tracking_window.regionWidget->regions.empty())
-    {
         cur_tracking_window.regionWidget->new_region();
-        cur_region = -1;
-    }
-
-    if(cur_tracking_window.regionWidget->currentRow() != cur_region)
-    {
-        cur_region = cur_tracking_window.regionWidget->currentRow();
-        sel_point.clear();
-        sel_coord.clear();
-    }
-
+    if (cur_tracking_window.regionWidget->currentRow() >=
+        cur_tracking_window.regionWidget->regions.size())
+        return;
     float Y = mouseEvent->scenePos().y();
     float X = mouseEvent->scenePos().x();
 

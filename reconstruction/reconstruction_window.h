@@ -10,15 +10,13 @@ namespace Ui {
     class reconstruction_window;
 }
 
-class ImageModel;
 class reconstruction_window : public QMainWindow
 {
     Q_OBJECT
     QSettings settings;
 public:
     QString absolute_path;
-    QStringList filenames;
-    explicit reconstruction_window(QStringList filenames_,QWidget *parent = 0);
+    explicit reconstruction_window(void* handle,QWidget *parent = 0);
     ~reconstruction_window();
 protected:
     void resizeEvent ( QResizeEvent * event );
@@ -29,12 +27,12 @@ private:
     QGraphicsScene scene;
     image::basic_image<image::rgb_color> buffer;
     QImage slice_image;
-    ImageModel* handle;
-    float params[5];
+    void* handle;
+    image::vector<3> vs;
     image::basic_image<unsigned char, 3>image;
     image::basic_image<unsigned char, 3>mask;
-    void load_src(int index);
-    void doReconstruction(unsigned char method_id,bool prompt);
+
+    void doReconstruction(unsigned char method_id,float* params);
 private slots:
     void on_QDif_toggled(bool checked);
     void on_GQI_toggled(bool checked);
@@ -52,7 +50,6 @@ private slots:
     void on_erosion_clicked();
     void on_SlicePos_sliderMoved(int position);
 
-    void on_QSDRT_toggled(bool checked);
 };
 
 #endif // RECONSTRUCTION_WINDOW_H

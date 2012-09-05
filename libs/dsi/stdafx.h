@@ -34,6 +34,11 @@ const unsigned int space_half_length = 1 << (dsi_range-1);    //8
 const int space_min_offset = -(1 << (dsi_range-1));                //-8
 const int space_max_offset = space_half_length-1;                  //7
 const unsigned int qspace_size = 1 << (dsi_range * 3);         //4096
+extern const char* process_position;
+
+const unsigned int mni_width = 79;
+const unsigned int mni_height = 95;
+const unsigned int mni_depth = 69;
 
 #endif
 

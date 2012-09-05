@@ -52,10 +52,8 @@ private:
     std::vector<const float*> odf_blocks;
     std::vector<unsigned int> odf_block_size;
     image::basic_image<unsigned char,3> odf_block_map1;
-    image::basic_image<unsigned int,3> odf_block_map2;
-public:
-    std::vector<std::string> index_name;
-    std::vector<std::vector<const float*> > index_data;
+    image::basic_image<unsigned short,3> odf_block_map2;
+
 public:
     std::vector<const float*> fa;
     float fa_threshold;
@@ -197,36 +195,6 @@ public:
                 continue;
             }
 
-            int prefix_name_index = 0;
-            for(;prefix_name_index < index_name.size();++prefix_name_index)
-                if(index_name[prefix_name_index] == prefix_name)
-                    break;
-            if(prefix_name_index == index_name.size())
-            {
-                index_name.push_back(prefix_name);
-                index_data.push_back(std::vector<const float*>());
-            }
-
-            if(index_data[prefix_name_index].size() <= store_index)
-                index_data[prefix_name_index].resize(store_index+1);
-            mat_reader.get_matrix(index,row,col,index_data[prefix_name_index][store_index]);
-
-        }
-
-        index_name.insert(index_name.begin(),fa.size() == 1 ? "fa":"qa");
-        index_data.insert(index_data.begin(),fa);
-
-        // check index_data integrity
-        for(int index = 1;index < index_data.size();++index)
-        {
-            for(int j = 0;j < index_data[index].size();++j)
-                if(!index_data[index][j])
-                {
-                    index_data.erase(index_data.begin()+index);
-                    index_name.erase(index_name.begin()+index);
-                    --index;
-                    break;
-                }
         }
 
         // handle the odf mappings
@@ -258,40 +226,39 @@ public:
 
         if (!odf_blocks.empty())
         {
+            unsigned int block_size = odf_block_size.front()/half_odf_size;
             odf_block_map1.resize(dim);
             odf_block_map2.resize(dim);
 
-            int voxel_index = 0;
-            for(int i = 0;i < odf_block_size.size();++i)
-                for(int j = 0;j < odf_block_size[i];j += half_odf_size)
+            for (unsigned int index = 0,j = 0,block_index = 0;index < odf_block_map1.size();++index)
+            {
+                if (getFA(index,0) == 0.0)
                 {
-                    int k_end = j + half_odf_size;
-                    bool is_odf_zero = true;
-                    for(int k = j;k < k_end;++k)
-                        if(odf_blocks[i][k] != 0.0)
+                    unsigned int from = j*(half_odf_size);
+                    unsigned int to = from + half_odf_size;
+                    bool odf_is_zero = true;
+                    if (to > odf_block_size[block_index])
+                        break;
+                    for (;from < to;++from)
+                        if (odf_blocks[block_index][from] != 0.0)
                         {
-                            is_odf_zero = false;
+                            odf_is_zero = false;
                             break;
                         }
-                    if(!is_odf_zero)
-                        for(;voxel_index < odf_block_map1.size();++voxel_index)
-                            if(getFA(voxel_index,0) != 0.0)
-                                break;
-                    if(voxel_index >= odf_block_map1.size())
-                        break;
-                    odf_block_map1[voxel_index] = i;
-                    odf_block_map2[voxel_index] = j;
-                    ++voxel_index;
+                    if (!odf_is_zero)
+                        continue;
                 }
+                ++j;
+                odf_block_map1[index] = block_index;
+                odf_block_map2[index] = j;
+                if (j >= block_size)
+                {
+                    j = 0;
+                    ++block_index;
+                }
+            }
         }
         return cur_odf_record;
-    }
-
-    void set_tracking_index(int new_index)
-    {
-        if(new_index >= index_data.size())
-            return;
-        fa = index_data[new_index];
     }
 
     float getFA(unsigned int index,unsigned char order) const
@@ -352,9 +319,9 @@ public:
 
         if (!odf_blocks.empty())
         {
-            if (index >= odf_block_map2.size())
+            if (index >= odf_block_map2.size() || odf_block_map2[index] == 0)
                 return 0;
-            return odf_blocks[odf_block_map1[index]] + odf_block_map2[index];
+            return odf_blocks[odf_block_map1[index]] + (odf_block_map2[index]-1)*half_odf_size;
         }
         return 0;
     }
@@ -468,7 +435,6 @@ public:
             view_item.back().image_data = buf;
             view_item.back().image_data.resize(fib.dim);
             view_item.back().set_scale(buf,buf+total_size);
-
         }
         if (!dim[2])
             return false;

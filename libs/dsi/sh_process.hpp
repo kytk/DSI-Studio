@@ -33,7 +33,7 @@ struct SHDecomposition : public BaseProcess
 public:
     virtual void init(Voxel& voxel)
     {
-
+        process_position = __FUNCTION__;
 
 		b0_index.clear();
                 for(unsigned int index = 0;index < voxel.bvalues.size();++index)
@@ -41,7 +41,7 @@ public:
 			    b0_index.push_back(index);
 
 
-        half_odf_size = voxel.ti.vertices_count/2;
+        half_odf_size = ti_vertices_count()/2;
         float lambda = voxel.param[0];
         const unsigned int R = ((max_l+1)*(max_l+2)/2);
         std::vector<std::pair<int,int> > j_map(R);
@@ -64,10 +64,10 @@ public:
             for (unsigned int n = 0,index = 0; n < half_odf_size; ++n)
                 for (unsigned int j = 0; j < R; ++j,++index)
                 {
-                    float atan2_xy = std::atan2(voxel.ti.vertices[n][1],voxel.ti.vertices[n][0]);
+                    float atan2_xy = std::atan2(ti_vertices(n)[1],ti_vertices(n)[0]);
                     if (atan2_xy < 0.0)
                         atan2_xy += 2.0*M_PI;
-                    U[index] = Yj(j_map[j].second,j_map[j].first,std::acos(voxel.ti.vertices[n][2]),atan2_xy);
+                    U[index] = Yj(j_map[j].second,j_map[j].first,std::acos(ti_vertices(n)[2]),atan2_xy);
                 }
             std::vector<float> P(R*R);
             for (unsigned int i = 0,index = 0; i < R; ++i,index += R+1)
@@ -103,7 +103,7 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-
+        process_position = __FUNCTION__;
 		// remove the b0 signal
                 for(unsigned int index = 0;index < b0_index.size();++index)
 			data.space[b0_index[index]] = 0;

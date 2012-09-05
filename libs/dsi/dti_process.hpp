@@ -140,6 +140,7 @@ class TensorEigenAnalysis : public BaseProcess
 public:
     virtual void init(Voxel& voxel)
     {
+        process_position = __FUNCTION__;
         fa.clear();
         fa.resize(voxel.total_size);
         fdir.clear();
@@ -183,7 +184,7 @@ public:
         //if(!voxel.need_odf)
         //	return;
         //for (unsigned int index = 0;index < data.odf.size();++index)
-        //    data.odf[index] = get_odf_value(voxel.ti.vertices[index],V,d);
+        //    data.odf[index] = get_odf_value(ti_vertices(index),V,d);
         //float sum = Accumulator()(data.odf);
         //if (sum == 0.0)
         //    return;
@@ -191,6 +192,8 @@ public:
     }
     virtual void end(Voxel& voxel,MatFile& mat_writer)
     {
+        process_position = __FUNCTION__;
+
         set_title("fa");
         mat_writer.add_matrix("fa0",&*fa.begin(),1,fa.size());
         set_title("dir0");
@@ -275,9 +278,9 @@ public:
             for (unsigned int index = 0;index < odf_size;++index)
             {
                 float value = 0.0;
-                value += voxel.ti.vertices[index][0]*vx;
-                value += voxel.ti.vertices[index][1]*vy;
-                value += voxel.ti.vertices[index][2]*vz;
+                value += ti_vertices(index)[0]*vx;
+                value += ti_vertices(index)[1]*vy;
+                value += ti_vertices(index)[2]*vz;
                 if (value > max_value)
                 {
                     max_value = value;

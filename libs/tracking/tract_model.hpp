@@ -43,7 +43,7 @@ public:
 
         bool save_fa_to_file(const char* file_name,float threshold,float cull_angle_cos);
         bool save_tracts_to_file(const char* file_name);
-        bool save_transformed_tracts_to_file(const char* file_name,const float* transform,bool end_point);
+        bool save_transformed_tracts_to_file(const char* file_name,const float* transform);
         bool save_data_to_file(const char* file_name,const std::string& index_name);
         void save_end_points(const char* file_name) const;
 

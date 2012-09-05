@@ -1,6 +1,5 @@
 #ifndef IMAGE_MODEL_HPP
 #define IMAGE_MODEL_HPP
-#include <boost/thread.hpp>
 #include <boost/math/special_functions/sinc.hpp>
 #include "math/matrix_op.hpp"
 #include "gqi_process.hpp"
@@ -125,11 +124,19 @@ public:
         // voxel size
         mat_writer.add_matrix("voxel_size",voxel.voxel_size,1,3);
 
-        std::vector<float> float_data;
-        std::vector<short> short_data;
-        voxel.ti.save_to_buffer(float_data,short_data);
-        mat_writer.add_matrix("odf_vertices",&*float_data.begin(),3,voxel.ti.vertices_count);
-        mat_writer.add_matrix("odf_faces",&*short_data.begin(),3,voxel.ti.faces.size());
+        std::vector<float> float_data(ti_vertices_count()*3);
+        std::vector<short> short_data(ti_faces_count()*3);
+
+
+        // odf_vertices
+        set_title("odf_table");
+        for (unsigned int i = 0,index = 0;i < ti_vertices_count();++i,index += 3)
+            std::copy(ti_vertices(i),ti_vertices(i)+3,float_data.begin()+index);
+        mat_writer.add_matrix("odf_vertices",&*float_data.begin(),3,ti_vertices_count());
+        // odf_faces
+        for (unsigned int i = 0,index = 0;i < ti_faces_count();++i,index += 3)
+            std::copy(ti_faces(i),ti_faces(i)+3,short_data.begin()+index);
+        mat_writer.add_matrix("odf_faces",&*short_data.begin(),3,ti_faces_count());
 
     }
 public:

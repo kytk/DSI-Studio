@@ -184,27 +184,6 @@
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_2">
        <item>
-        <widget class="QComboBox" name="upsampling">
-         <item>
-          <property name="text">
-           <string>No upsampling</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>upsampling 2</string>
-          </property>
-         </item>
-        </widget>
-       </item>
-       <item>
-        <widget class="QCheckBox" name="topdown">
-         <property name="text">
-          <string>top-down slices</string>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QLabel" name="label">
          <property name="frameShape">
           <enum>QFrame::NoFrame</enum>

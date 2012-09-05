@@ -7,7 +7,7 @@
 #include <map>
 #include <string>
 #include <stdexcept>
-#include "gzlib/zlib.h"
+#include <zlib.h>
 #include "prog_interface_static_link.h"
 
 template<typename fun_type>
@@ -448,28 +448,24 @@ public:
         return dataset[index].get_name().c_str();
     }
     template<typename out_type>
-    bool get_matrix(unsigned int index,unsigned int& rows,unsigned int& cols,const out_type*& out)
+    void get_matrix(unsigned int index,unsigned int& rows,unsigned int& cols,const out_type*& out)
     {
         out = (const out_type*)get_matrix(index,rows,cols,mat_type_info<out_type>::type);
-        return out != 0;
     }
     template<typename out_type>
-    bool get_matrix(const char* name,unsigned int& rows,unsigned int& cols,const out_type*& out)
+    void get_matrix(const char* name,unsigned int& rows,unsigned int& cols,const out_type*& out)
     {
         out = (const out_type*)get_matrix(name,rows,cols,mat_type_info<out_type>::type);
-        return out != 0;
     }
     template<typename out_type>
-    bool get_matrix(unsigned int index,unsigned int& rows,unsigned int& cols,out_type*& out)
+    void get_matrix(unsigned int index,unsigned int& rows,unsigned int& cols,out_type*& out)
     {
         out = (out_type*)get_matrix(index,rows,cols,mat_type_info<out_type>::type);
-        return out != 0;
     }
     template<typename out_type>
-    bool get_matrix(const char* name,unsigned int& rows,unsigned int& cols,out_type*& out)
+    void get_matrix(const char* name,unsigned int& rows,unsigned int& cols,out_type*& out)
     {
         out = (out_type*)get_matrix(name,rows,cols,mat_type_info<out_type>::type);
-        return out != 0;
     }
 };
 

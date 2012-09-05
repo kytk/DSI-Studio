@@ -337,10 +337,7 @@ void dicom_parser::on_buttonBox_accepted()
                     ui->tableWidget->item(index,4)->text().toDouble());
     }
 
-    DwiHeader::output_src(ui->SrcName->text().toLocal8Bit().begin(),
-                          dwi_files,
-                          ui->upsampling->currentIndex() == 1,
-                          ui->topdown->checkState() == Qt::Checked);
+    DwiHeader::output_src(ui->SrcName->text().toLocal8Bit().begin(),dwi_files);
 
     dwi_files.clear();
     if(QFileInfo(ui->SrcName->text()).suffix() != "gz")
@@ -425,7 +422,6 @@ void dicom_parser::on_toolButton_2_clicked()
                   std::istream_iterator<double>(),
                   std::back_inserter(b_table));
     }
-    /*
     if(b_table.size() != ui->tableWidget->rowCount()*4)
     {
         // GE condition
@@ -447,10 +443,9 @@ void dicom_parser::on_toolButton_2_clicked()
         }
     }
     else
-    */
     for (unsigned int index = 0,b_index = 0;index < ui->tableWidget->rowCount();++index)
     {
-        for(unsigned int j = 0;j < 4 && b_index < b_table.size();++j,++b_index)
+        for(unsigned int j = 0;j < 4;++j,++b_index)
             ui->tableWidget->item(index,j+1)->setText(QString::number(b_table[b_index]));
     }
 }

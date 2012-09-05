@@ -16,7 +16,7 @@
 #include "ui_mainwindow.h"
 #include "simulation.h"
 #include "reconstruction/vbcdialog.h"
-#include "mapping/atlas.hpp"
+#include "libs/mapping/atlas.hpp"
 #include "libs/vbc/vbc.hpp"
 
 std::vector<atlas> atlas_list;
@@ -67,8 +67,8 @@ void MainWindow::open_fib_at(int row,int col)
 
 void MainWindow::open_src_at(int row,int col)
 {
-    loadSrc(QStringList() << (ui->recentSrc->item(row,1)->text() + "/" +
-            ui->recentSrc->item(row,0)->text()));
+    loadSrc(ui->recentSrc->item(row,1)->text() + "/" +
+            ui->recentSrc->item(row,0)->text());
 }
 
 
@@ -176,21 +176,24 @@ void MainWindow::loadFib(QString filename)
 
 }
 
-void MainWindow::loadSrc(QStringList filenames)
+void MainWindow::loadSrc(QString filename)
 {
-    try
+    std::string file_name = filename.toLocal8Bit().begin();
+    begin_prog("load src");
+    check_prog(0,1);
+    void* handle = init_reconstruction(&*file_name.begin());
+    if (!handle)
     {
-        reconstruction_window* new_mdi = new reconstruction_window(filenames,this);
+        QMessageBox::information(this,"error","Cannot load the .src file, please check the memory sufficiency",0);
+        return;
+    }
+    {
+        reconstruction_window* new_mdi = new reconstruction_window(handle,this);
         new_mdi->setAttribute(Qt::WA_DeleteOnClose);
+        new_mdi->absolute_path = QFileInfo(filename).absolutePath();
         new_mdi->show();
-        if(filenames.size() == 1)
-            addSrc(filenames[0]);
     }
-    catch(...)
-    {
-
-    }
-
+    addSrc(filename);
 }
 
 
@@ -202,7 +205,7 @@ void MainWindow::openRecentFibFile(void)
 void MainWindow::openRecentSrcFile(void)
 {
     QAction *action = qobject_cast<QAction *>(sender());
-    loadSrc(QStringList() << action->data().toString());
+    loadSrc(action->data().toString());
 }
 
 void MainWindow::on_OpenDICOM_clicked()
@@ -241,14 +244,14 @@ void MainWindow::on_OpenDICOM_clicked()
 
 void MainWindow::on_Reconstruction_clicked()
 {
-    QStringList filenames = QFileDialog::getOpenFileNames(
+    QString filename = QFileDialog::getOpenFileName(
                            this,
                            "Open Src files",
                            ui->workDir->currentText(),
                            "Src files (*.src.gz *.src);;All files (*.*)" );
-    if (filenames.isEmpty())
+    if (filename.isEmpty())
         return;
-    loadSrc(filenames);
+    loadSrc(filename);
 }
 
 void MainWindow::on_FiberTracking_clicked()
@@ -401,17 +404,10 @@ void MainWindow::on_averagefib_clicked()
 {
     QStringList filenames = QFileDialog::getOpenFileNames(
                                 this,
-                                "Select Fib files to average",
+                                "Open Fib files",
                                 ui->workDir->currentText(),
                                 "Fib files (*.fib.gz *.src);;All files (*.*)" );
     if (filenames.isEmpty())
-        return;
-    QString outfile = QFileDialog::getSaveFileName(
-                                this,
-                                "Save file to",
-                                filenames[0],
-                                "Fib files (*.fib.gz *.src);;All files (*.*)" );
-    if (outfile.isEmpty())
         return;
     std::vector<std::string> name_list(filenames.count());
     std::vector<const char*> name_list_buf(filenames.count());
@@ -420,7 +416,9 @@ void MainWindow::on_averagefib_clicked()
         name_list[index] = filenames[index].toLocal8Bit().begin();
         name_list_buf[index] = name_list[index].c_str();
     }
-    std::string out_name = outfile.toLocal8Bit().begin();
+    std::string out_name = QFileInfo(filenames[0]).
+                           absoluteDir().absolutePath().toLocal8Bit().begin();
+    out_name += "avg";
     odf_average(out_name.c_str(),
                 &*name_list_buf.begin(),
                 filenames.count());

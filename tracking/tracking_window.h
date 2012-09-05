@@ -97,9 +97,6 @@ private slots:
     void update_color_map(void);
 
     void on_save_report_clicked();
-    void on_tracking_index_currentIndexChanged(int index);
-    void on_actionSave_Endpoints_in_Current_Mapping_triggered();
-    void on_deleteSlice_clicked();
 };
 
 #endif // TRACKING_WINDOW_H

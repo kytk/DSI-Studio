@@ -2,10 +2,7 @@
 
 #ifndef SliceModelH
 #define SliceModelH
-#include <boost/thread/thread.hpp>
 #include "image/image.hpp"
-
-
 //#include "coreg_interface.h"
 
 // ---------------------------------------------------------------------------
@@ -110,18 +107,10 @@ public:
 public:
     void get_slice(image::color_image& image,float contrast,float offset) const;
     image::basic_image<float, 3,image::const_pointer_memory<float> > get_source(void) const{return source_images;}
-    void get_mosaic(image::color_image& image,
-                    unsigned int mosaic_size,
-                    float contrast,
-                    float offset,
-                    unsigned int skip) const;
+    void get_mosaic(image::color_image& image,unsigned int mosaic_size,float contrast,float offset) const;
 };
 
 class CustomSliceModel : public SliceModel{
-
-    mutable std::auto_ptr<boost::thread> back_thread;
-    image::basic_image<float, 3> smoothed_source_images;
-    void load_smooth_image(void);
 public:
     image::basic_image<float, 3> source_images;
     float min_value,max_value,scale;
@@ -129,15 +118,7 @@ public:
     CustomSliceModel(const image::io::volume& volume,const image::vector<3,float>& center_point_);
 public:
     void get_slice(image::color_image& image,float contrast,float offset) const;
-    image::basic_image<float, 3,image::const_pointer_memory<float> > get_source(void) const
-    {
-        if(back_thread.get())
-        {
-            back_thread->join();
-            back_thread.reset(0);
-        }
-        return smoothed_source_images;
-    }
+    image::basic_image<float, 3,image::const_pointer_memory<float> > get_source(void) const{return source_images;}
 };
 
 #endif

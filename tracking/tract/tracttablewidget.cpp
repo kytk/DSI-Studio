@@ -156,6 +156,8 @@ void TractTableWidget::fetch_tracts(void)
         {
             has_thread = true;
             // 2 for seed number
+            item(index,3)->setText(
+                QString::number(thread_data[index]->total_seedings));
             if(thread_data[index]->fetchTracks(tract_models[index]))
             {
                 // 1 for tract number
@@ -163,8 +165,6 @@ void TractTableWidget::fetch_tracts(void)
                         QString::number(tract_models[index]->get_visible_track_count()));
                 has_tracts = true;
             }
-            item(index,3)->setText(
-                QString::number(thread_data[index]->total_seedings));
             if(thread_data[index]->is_ended())
             {
                 delete thread_data[index];
@@ -294,25 +294,7 @@ void TractTableWidget::saveTransformedTracts(const float* transform)
     if(filename.isEmpty())
         return;
     std::string sfilename = filename.toLocal8Bit().begin();
-    tract_models[currentRow()]->save_transformed_tracts_to_file(&*sfilename.begin(),transform,false);
-}
-
-
-
-void TractTableWidget::saveTransformedEndpoints(const float* transform)
-{
-    if(currentRow() >= tract_models.size())
-        return;
-    QString filename;
-    filename = QFileDialog::getSaveFileName(
-                this,
-                "Save end_point as",
-                cur_tracking_window.absolute_path + "/" + item(currentRow(),0)->text() + ".txt",
-                "Tract files (*.txt);;All files (*.*)");
-    if(filename.isEmpty())
-        return;
-    std::string sfilename = filename.toLocal8Bit().begin();
-    tract_models[currentRow()]->save_transformed_tracts_to_file(&*sfilename.begin(),transform,true);
+    tract_models[currentRow()]->save_transformed_tracts_to_file(&*sfilename.begin(),transform);
 }
 
 void TractTableWidget::load_tracts_color(void)

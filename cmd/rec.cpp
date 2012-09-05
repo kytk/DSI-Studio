@@ -2,7 +2,6 @@
 #include <iterator>
 #include <string>
 #include "image/image.hpp"
-#include "libs/dsi/image_model.hpp"
 #include "boost/program_options.hpp"
 #include "dsi_interface_static_link.h"
 #include "mapping/fa_template.hpp"
@@ -25,14 +24,11 @@ int rec(int ac, char *av[])
     ("source", po::value<std::string>(), "assign the .src file name")
     ("mask", po::value<std::string>(), "assign the mask file")
     ("method", po::value<int>(), "reconstruction methods (0:dsi, 1:dti, 2:qbi_frt, 3:qbi_sh, 4:gqi)")
-    ("odf_order", po::value<int>()->default_value(8), "set odf dimensions (4:162 direcitons, 5:252 directions, 6:362 directions, 8:642 directions)")
+    ("odf_order", po::value<int>(), "set odf dimensions (4:162 direcitons, 5:252 directions, 6:362 directions, 8:642 directions)")
     ("record_odf", po::value<int>()->default_value(0), "set record odf to on using --record_odf=1")
     ("thread", po::value<int>()->default_value(2), "set the multi-thread count --thread=2")
-    ("num_fiber", po::value<int>()->default_value(3), "maximum fibers resolved per voxel, default=3")
-    ("half_sphere", po::value<int>()->default_value(0), "specific whether half sphere is used")
-    ("deconvolution", po::value<int>()->default_value(0), "apply deconvolution")
-    ("decomposition", po::value<int>()->default_value(0), "apply decomposition")
-    ("r2_weighted", po::value<int>()->default_value(0), "set the r2 weighted in GQI")
+    ("num_fiber", po::value<int>(), "maximum fibers resolved per voxel, default=3")
+    ("decomposition", po::value<int>(), "set the decomposition")
     ("param0", po::value<float>(), "set parameters")
     ("param1", po::value<float>(), "set parameters")
     ("param2", po::value<float>(), "set parameters")
@@ -62,10 +58,16 @@ int rec(int ac, char *av[])
 
     float param[4] = {0,0,0,0};
     int method_index = 0;
+    int odf_order = 8; // for 362 directions
+    int num_fiber = 3;
+    if (vm.count("odf_order"))
+        odf_order = vm["odf_order"].as<int>();
+    if (vm.count("num_fiber"))
+        num_fiber = vm["num_fiber"].as<int>();
 
 
     method_index = vm["method"].as<int>();
-    if(method_index == 0) // DSI
+    if(method_index == 0)
         param[0] = 17.0;
     if(method_index == 2)
     {
@@ -98,30 +100,22 @@ int rec(int ac, char *av[])
     if (vm.count("param3"))
         param[3] = vm["param3"].as<float>();
 
-
-    handle->thread_count = vm["thread"].as<int>(); //thread count
-    handle->voxel.ti.init(vm["odf_order"].as<int>());
-    handle->voxel.need_odf = vm["record_odf"].as<int>();
-    handle->voxel.odf_deconvolusion = vm["deconvolution"].as<int>();
-    handle->voxel.odf_decomposition = vm["decomposition"].as<int>();
-    handle->voxel.half_sphere = vm["half_sphere"].as<int>();
-    handle->voxel.max_fiber_number = vm["num_fiber"].as<int>();
-    handle->voxel.r2_weighted = vm["r2_weighted"].as<int>();
-
+    unsigned int options[10];
+    options[0] = method_index;
+    options[1] = vm["thread"].as<int>(); //thread count
+    options[2] = odf_order;
+    options[3] = vm["record_odf"].as<int>();
+    options[4] = 0;//vm.count("gfa_mask") ? 1 : 0;
+    options[5] = 0;//vm.count("deconvolution") ? 1:0;
+    options[6] = vm.count("decomposition") ? 1:0;
+    options[7] = vm.count("half_sphere") ? 1:0;
+    options[8] = 0;//vm.count("recursive_sharpening") ? 1:0;
+    options[9] = num_fiber;//# of resolved fibers
     {
         out << "method=" << method_index << std::endl;
-        out << "odf_order=" << vm["odf_order"].as<int>() << std::endl;
-        out << "num_fiber=" << vm["num_fiber"].as<int>() << std::endl;
-        if(handle->voxel.need_odf)
-            out << "record ODF in the fib file" << std::endl;
-        if(handle->voxel.odf_deconvolusion)
-            out << "apply deconvolution" << std::endl;
-        if(handle->voxel.odf_decomposition)
-            out << "apply decomposition" << std::endl;
-        if(handle->voxel.half_sphere)
-            out << "half sphere is used" << std::endl;
-        if(handle->voxel.r2_weighted && method_index == 4)
-            out << "r2 weighted is used for GQI" << std::endl;
+        out << "odf_order=" << odf_order << std::endl;
+        out << "num_fiber=" << num_fiber << std::endl;
+        out << "record_odf=" << vm.count("record_odf") << std::endl;
     }
 
     {
@@ -164,7 +158,7 @@ int rec(int ac, char *av[])
         }
         }
     out << "start reconstruction..." <<std::endl;
-    const char* msg = reconstruction(handle,method_index,param);
+    const char* msg = reconstruction(handle,options,param);
     if (!msg)
         out << "Reconstruction finished:" << msg << std::endl;
     free_reconstruction(handle);

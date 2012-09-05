@@ -51,6 +51,7 @@ public:
     //* used for phantom warpping
     virtual void run(Voxel& voxel, VoxelData& data)
     {
+        process_position = __FUNCTION__;
         unsigned int p_index = data.voxel_index;
         unsigned int x = p_index % des_geo[0];
         p_index -= x;
@@ -95,7 +96,7 @@ public:
                 for (unsigned int j = 0,index = 0; j < data.odf.size(); ++j)
                 {
 
-                    image::vector<3,float> dir(voxel.ti.vertices[j]);
+                    image::vector<3,float> dir(ti_vertices(j));
                     image::vector<3,float> dir_to(dir);
                     dir_to[0] = dir[0]*xx_dx+dir[1]*xx_dy;
                     dir_to[1] = dir[0]*xx_dy+dir[1]*xx_dx;
@@ -133,14 +134,15 @@ private:
     double voxel_volume_scale;
     std::vector<float> max_odf;
     std::vector<double> jdet;
-    int b0_index;
 private:
+    bool gqir2;
     double r2_base_function(double theta)
     {
             if(std::abs(theta) < 0.000001)
                     return 1.0/3.0;
             return (2*std::cos(theta)+(theta-2.0/theta)*std::sin(theta))/theta/theta;
     }
+
 private:
     typedef image::basic_image<unsigned short,3,image::const_pointer_memory<unsigned short> > point_image_type;
     std::vector<point_image_type> ptr_images;
@@ -149,6 +151,7 @@ private:
 public:
     virtual void init(Voxel& voxel)
     {
+        process_position = __FUNCTION__;
         begin_prog("normalization");
 
         mni.VF.swap(voxel.qa_map);
@@ -171,6 +174,7 @@ public:
         voxel_volume_scale =  mni.VFvs[0]*mni.VFvs[1]*mni.VFvs[2]/mni.VGvs[0]/mni.VGvs[1]/mni.VGvs[2];
 
         mni.set_voxel_size(voxel.param[1]);
+        gqir2 = voxel.param[2] > 0 ? true:false;
 
         begin_prog("q-space diffeomorphic reconstruction");
         src_geo = mni.VF.geometry();
@@ -207,12 +211,6 @@ public:
             q_vectors_time[index] *= sigma;
         }
 
-        b0_index = -1;
-        if(voxel.half_sphere)
-            for(unsigned int index = 0;index < voxel.bvalues.size();++index)
-                if(voxel.bvalues[index] == 0)
-                    b0_index = index;
-
         ptr_images.clear();
         for (unsigned int index = 0; index < voxel.image_model->dwi_data.size(); ++index)
             ptr_images.push_back(point_image_type((const unsigned short*)voxel.image_model->dwi_data[index],src_geo));
@@ -232,6 +230,7 @@ public:
 
     virtual void run(Voxel& voxel, VoxelData& data)
     {
+        process_position = __FUNCTION__;
         image::pixel_index<3> pos(data.voxel_index,des_geo);
         image::vector<3,double> b;
         float jacobian[9];
@@ -248,16 +247,13 @@ public:
                 for (unsigned int i = 0; i < data.space.size(); ++i)
                     trilinear_interpolation.estimate(ptr_images[i],b,data.space[i]);
 
-                if(b0_index >= 0)
-                    data.space[b0_index] /= 2.0;
-
                 std::vector<float> sinc_ql(data.odf.size()*voxel.q_count);
                 for (unsigned int j = 0,index = 0; j < data.odf.size(); ++j)
                 {
-                    image::vector<3,double> dir(voxel.ti.vertices[j]),from;
+                    image::vector<3,double> dir(ti_vertices(j)),from;
                     math::matrix_product(jacobian,dir.begin(),from.begin(),math::dim<3,3>(),math::dim<3,1>());
                     from.normalize();
-                    if(voxel.r2_weighted)
+                    if(gqir2)
                         for (unsigned int i = 0; i < voxel.q_count; ++i,++index)
                             sinc_ql[index] = r2_base_function(q_vectors_time[i]*from);
                     else

@@ -108,6 +108,8 @@ void q4pugss_EndCallBackSlot(QObject*, int)
 #include <iostream>
 #include <iterator>
 std::string program_base;
+char * faPath;
+
 int main(int ac, char *av[])
 {
 
@@ -162,7 +164,7 @@ int main(int ac, char *av[])
     if(ac > 2)
     {
         {
-            std::cout << "DSI Studio " << __DATE__ << ", Fang-Cheng Yeh" << std::endl;
+            std::cout << "DSI Studio " << __DATE__ << " linux build, Fang-Cheng Yeh" << std::endl;
 
         // options for general options
             po::options_description desc("reconstruction options");
@@ -221,22 +223,21 @@ int main(int ac, char *av[])
     font.setFamily(QString::fromUtf8("Arial"));
     a.setFont(font);
 
+    /* 
+     * get path to FA file from env variable
+     */
+    faPath = getenv("DSI_STUDIO_FA_TEMPLATE");
+    if (faPath==NULL)
+      faPath = "FMRIB58_FA_1mm.nii";
+    
+    if(!fa_template_imp.load_from_file(faPath))
     {
-        int pos = 0;
-        for(int index = 0;av[0][index];++index)
-            if(av[0][index] == '\\' || av[0][index] == '/')
-                pos = index;
-        std::string fa_template_path(&(av[0][0]),&(av[0][0])+pos+1);
-        fa_template_path += "FMRIB58_FA_1mm.nii";
-        if(!fa_template_imp.load_from_file(fa_template_path.c_str()))
-        {
-            QMessageBox::information(0,"Error","Cannot find the fa template file",0);
-            return 0;
-        }
+        QMessageBox::information(0,"Error","Cannot find the fa template file",0);
+        return 0;
     }
     MainWindow w;
     w.setFont(font);
     w.showMaximized();
-    w.setWindowTitle(QString("DSI Studio ") + __DATE__ + " build");
+    w.setWindowTitle(QString("DSI Studio ") + __DATE__ + " linux build");
     return a.exec();
 }

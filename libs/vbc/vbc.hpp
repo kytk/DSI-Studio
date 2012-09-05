@@ -46,8 +46,8 @@ public:
     void calculate_mapping(const char* file_name,
                            float p_value_threshold);
 
-    void calculate_statistics(float p_value_threshold,
-                              vbc_clustering& vbc,bool is_null) const;
+    void calculate_statistics(const std::vector<unsigned short>& mapping,float p_value_threshold,
+                              vbc_clustering& vbc) const;
 public:
     float angle_threshold_cos;
     void calculate_cluster(

@@ -72,7 +72,7 @@
        <widget class="QToolButton" name="addSlices">
         <property name="maximumSize">
          <size>
-          <width>24</width>
+          <width>16777215</width>
           <height>22</height>
          </size>
         </property>
@@ -85,23 +85,6 @@
         </property>
         <property name="toolButtonStyle">
          <enum>Qt::ToolButtonTextBesideIcon</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="deleteSlice">
-        <property name="maximumSize">
-         <size>
-          <width>24</width>
-          <height>22</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>...</string>
-        </property>
-        <property name="icon">
-         <iconset resource="../icons.qrc">
-          <normaloff>:/icons/icons/delete.xpm</normaloff>:/icons/icons/delete.xpm</iconset>
         </property>
        </widget>
       </item>
@@ -802,7 +785,6 @@
     <addaction name="actionLoad_mapping"/>
     <addaction name="separator"/>
     <addaction name="actionSave_Tracts_in_Current_Mapping"/>
-    <addaction name="actionSave_Endpoints_in_Current_Mapping"/>
    </widget>
    <addaction name="menu_Edit"/>
    <addaction name="menuRegions"/>
@@ -1209,16 +1191,6 @@
            <string>Mosaic</string>
           </property>
          </item>
-         <item>
-          <property name="text">
-           <string>Mosaic2</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Mosaic4</string>
-          </property>
-         </item>
         </widget>
        </item>
        <item>
@@ -1285,16 +1257,6 @@
          </property>
          <property name="text">
           <string>Fibers</string>
-         </property>
-         <property name="checked">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QCheckBox" name="show_pos">
-         <property name="text">
-          <string>Pos</string>
          </property>
          <property name="checked">
           <bool>true</bool>
@@ -1531,7 +1493,11 @@
           <number>5</number>
          </property>
          <item>
-          <widget class="QComboBox" name="tracking_index"/>
+          <widget class="QLabel" name="label">
+           <property name="text">
+            <string>Fiber threshold</string>
+           </property>
+          </widget>
          </item>
          <item>
           <widget class="QDoubleSpinBox" name="fa_threshold">
@@ -2951,15 +2917,6 @@
   <action name="actionRestore_window_layout">
    <property name="text">
     <string>Restore window layout</string>
-   </property>
-  </action>
-  <action name="actionSave_Endpoints_in_Current_Mapping">
-   <property name="icon">
-    <iconset resource="../icons.qrc">
-     <normaloff>:/icons/icons/save.xpm</normaloff>:/icons/icons/save.xpm</iconset>
-   </property>
-   <property name="text">
-    <string>Save Endpoints in Current Mapping...</string>
    </property>
   </action>
  </widget>

@@ -10,7 +10,7 @@ extern "C"
     unsigned char* get_mask_image(ImageModel* image_model);
     char* check_reconstruction(ImageModel* image_model);
     const char* reconstruction(ImageModel* image_model,
-                       unsigned int method_id,
+                       unsigned int* options,
                        const float* param_values);
     bool odf_average(const char* out_name,
             const char* const * file_name,unsigned int file_num);

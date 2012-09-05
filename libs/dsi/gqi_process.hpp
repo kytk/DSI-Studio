@@ -13,33 +13,37 @@
 class CorrectB0  : public BaseProcess
 {
 public:
-    std::vector<unsigned int> b0_images;
+        std::vector<unsigned int> b0_images;
 public:
     virtual void init(Voxel& voxel)
     {
+		process_position = __FUNCTION__;
         b0_images.clear();
-        for(unsigned int index = 0;index < voxel.bvalues.size();++index)
-            if(voxel.bvalues[index] == 0)
-                b0_images.push_back(index);
+                for(unsigned int index = 0;index < voxel.bvalues.size();++index)
+		    if(voxel.bvalues[index] == 0)
+			    b0_images.push_back(index);
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        //average all the b0 iamges
+        process_position = __FUNCTION__;
+		//average all the b0 iamges
         if((b0_images.size() == 1 && !voxel.half_sphere) || b0_images.empty())
             return;
-        float sum_b0 = data.space[b0_images.front()];
-        if(b0_images.size() >= 2)
         {
-            for(unsigned int index = 1;index < b0_images.size();++index)
-            {
-                    sum_b0 += data.space[b0_images[index]];
-                    data.space[b0_images[index]] = 0;
-            }
-            sum_b0 /= b0_images.size();
+                float sum_b0 = data.space[b0_images.front()];
+                if(b0_images.size() >= 2)
+                {
+                        for(unsigned int index = 1;index < b0_images.size();++index)
+                    {
+                            sum_b0 += data.space[b0_images[index]];
+                            data.space[b0_images[index]] = 0;
+                    }
+                    sum_b0 /= b0_images.size();
+                }
+                if(voxel.half_sphere)
+                        sum_b0 /= 2.0;
+                data.space[b0_images.front()] = sum_b0;
         }
-        if(voxel.half_sphere)
-                sum_b0 /= 2.0;
-        data.space[b0_images.front()] = sum_b0;
     }
 };
 
@@ -48,40 +52,96 @@ class QSpace2Odf  : public BaseProcess
 {
 public:
     std::vector<float> sinc_ql;
-    double base_function(double theta)
-    {
-        if(std::abs(theta) < 0.000001)
-            return 1.0/3.0;
-        return (2*std::cos(theta)+(theta-2.0/theta)*std::sin(theta))/theta/theta;
-    }
 public:
     virtual void init(Voxel& voxel)
     {
-        unsigned int odf_size = voxel.ti.half_vertices_count;
-        sinc_ql.resize(odf_size*voxel.bvalues.size());
+        process_position = __FUNCTION__;
+        unsigned int odf_size = voxel.full_odf_dimension >> 1;
+        unsigned int b_count = voxel.bvalues.size();
+        sinc_ql.resize(odf_size*b_count);
         float sigma = voxel.param[0]; //optimal 1.24
 
         // calculate reconstruction matrix
         for (unsigned int j = 0,index = 0; j < odf_size; ++j)
-            for (unsigned int i = 0; i < voxel.bvalues.size(); ++i,++index)
+            for (unsigned int i = 0; i < b_count; ++i,++index)
                 sinc_ql[index] = voxel.bvectors[i]*
-                             image::vector<3,float>(voxel.ti.vertices[j])*
+                             image::vector<3,float>(ti_vertices(j))*
                                std::sqrt(voxel.bvalues[i]*0.01506); // £^G£_
 
         for (unsigned int index = 0; index < sinc_ql.size(); ++index)
-            sinc_ql[index] = voxel.r2_weighted ?
-                         base_function(sinc_ql[index]*sigma):
-                         boost::math::sinc_pi(sinc_ql[index]*sigma);
+            sinc_ql[index] = boost::math::sinc_pi(sinc_ql[index]*sigma);
+
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        math::matrix_vector_product(&*sinc_ql.begin(),&*data.space.begin(),&*data.odf.begin(),
+        process_position = __FUNCTION__;
+		math::matrix_vector_product(&*sinc_ql.begin(),&*data.space.begin(),&*data.odf.begin(),
                                     math::dyndim(data.odf.size(),voxel.bvalues.size()));
     }
     virtual void end(Voxel& voxel,MatFile& mat_writer)
     {
 
     }
+};
+
+// for normalization
+class RecordQA  : public BaseProcess
+{
+public:
+    virtual void init(Voxel& voxel)
+    {
+        voxel.qa_map.resize(image::geometry<3>(voxel.matrix_width,voxel.matrix_height,voxel.slice_number));
+        std::fill(voxel.qa_map.begin(),voxel.qa_map.end(),0.0);
+    }
+    virtual void run(Voxel& voxel, VoxelData& data)
+    {
+        voxel.qa_map[data.voxel_index] = data.fa[0];
+    }
+    virtual void end(Voxel& voxel,MatFile& mat_writer)
+    {
+
+    }
+};
+
+
+
+
+class QSpace2OdfR2  : public BaseProcess
+{
+public:
+    std::vector<float> sinc_ql;
+	double base_function(double theta)
+	{
+		if(std::abs(theta) < 0.000001)
+			return 1.0/3.0;
+		return (2*std::cos(theta)+(theta-2.0/theta)*std::sin(theta))/theta/theta;
+	}
+public:
+    virtual void init(Voxel& voxel)
+    {
+        process_position = __FUNCTION__;
+        unsigned int odf_size = voxel.full_odf_dimension >> 1;
+        sinc_ql.resize(odf_size*voxel.bvalues.size());
+        std::vector<float> w(sinc_ql.size());
+        float sigma = voxel.param[0]; //optimal 1.24
+        {
+
+            for (unsigned int j = 0,index = 0; j < odf_size; ++j)
+                for (unsigned int i = 0; i < voxel.bvalues.size(); ++i,++index)
+                    w[index] = voxel.bvectors[i]*image::vector<3,float>(ti_vertices(j))*
+                               std::sqrt(voxel.bvalues[i]*0.01506); // £^G£_
+
+            for (unsigned int index = 0; index < w.size(); ++index)
+                sinc_ql[index] = base_function(w[index]*sigma);
+        }
+    }
+    virtual void run(Voxel& voxel, VoxelData& data)
+    {
+        process_position = __FUNCTION__;
+		math::matrix_vector_product(&*sinc_ql.begin(),&*data.space.begin(),&*data.odf.begin(),
+                                    math::dyndim(data.odf.size(),voxel.bvalues.size()));
+    }
+
 };
 
 
@@ -97,6 +157,7 @@ public:
     virtual void init(Voxel& voxel)
     {
         QSpace2Odf::init(voxel);
+        process_position = __FUNCTION__;
 
         float dif_sampling_length_6Dt = voxel.param[0]; //optimal 1.24
         b0_index = std::find(voxel.bvalues.begin(),voxel.bvalues.end(),0)-voxel.bvalues.begin();
@@ -149,6 +210,7 @@ public:
         if(b0_index < voxel.bvalues.size())
             std::for_each(data.space.begin(),data.space.end(),boost::lambda::_1 /= data.space[b0_index]);
         QSpace2Odf::run(voxel,data);
+        process_position = __FUNCTION__;
         float min = *std::min_element(data.odf.begin(),data.odf.end());
         float scale = 1.0;
         if(b0_index < voxel.bvalues.size())
@@ -166,6 +228,7 @@ public:
     }
     virtual void end(Voxel& voxel,MatFile& mat_writer)
     {
+        process_position = __FUNCTION__;
         for (unsigned int index = 0; index < images.size(); ++index)
         {
             std::ostringstream out;
@@ -176,24 +239,5 @@ public:
     }
 };
 
-
-// for normalization
-class RecordQA  : public BaseProcess
-{
-public:
-    virtual void init(Voxel& voxel)
-    {
-        voxel.qa_map.resize(image::geometry<3>(voxel.matrix_width,voxel.matrix_height,voxel.slice_number));
-        std::fill(voxel.qa_map.begin(),voxel.qa_map.end(),0.0);
-    }
-    virtual void run(Voxel& voxel, VoxelData& data)
-    {
-        voxel.qa_map[data.voxel_index] = data.fa[0];
-    }
-    virtual void end(Voxel& voxel,MatFile& mat_writer)
-    {
-
-    }
-};
 
 #endif//DDI_PROCESS_HPP

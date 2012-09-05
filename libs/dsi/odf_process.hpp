@@ -60,12 +60,14 @@ struct RemoveIsotropicPart
 const unsigned int odf_block_size = 20000;
 struct OutputODF : public BaseProcess
 {
-protected:
     std::vector<std::vector<float> > odf_data;
     std::vector<unsigned int> odf_index_map;
+    unsigned int block_index;
+    unsigned int odf_index;
 public:
     virtual void init(Voxel& voxel)
     {
+        process_position = __FUNCTION__;
         odf_data.clear();
         if (voxel.need_odf)
         {
@@ -96,30 +98,35 @@ public:
                 }
                 odf_data.resize(size_list.size());
                 for (unsigned int index = 0;index < odf_data.size();++index)
-                    odf_data[index].resize(size_list[index]*(voxel.ti.half_vertices_count));
+                    odf_data[index].resize(size_list[index]*(voxel.full_odf_dimension >> 1));
             }
             catch (...)
             {
                 odf_data.clear();
                 voxel.need_odf = false;
             }
+
+            block_index = 0;
+            odf_index = 0;
         }
 
     }
     virtual void run(Voxel& voxel,VoxelData& data)
     {
 
-        if (voxel.need_odf && data.fa[0] + 1.0 != 1.0)
+        process_position = __FUNCTION__;
+        if (voxel.need_odf)
         {
             unsigned int odf_index = odf_index_map[data.voxel_index];
             std::copy(data.odf.begin(),data.odf.end(),
-                      odf_data[odf_index/odf_block_size].begin() + (odf_index%odf_block_size)*(voxel.ti.half_vertices_count));
+                      odf_data[odf_index/odf_block_size].begin() + (odf_index%odf_block_size)*(voxel.full_odf_dimension >> 1));
         }
 
     }
     virtual void end(Voxel& voxel,MatFile& mat_writer)
     {
 
+        process_position = __FUNCTION__;
         if (!voxel.need_odf)
             return;
         {
@@ -131,8 +138,8 @@ public:
                 std::ostringstream out;
                 out << "odf" << index;
                 mat_writer.add_matrix(out.str().c_str(),&*odf_data[index].begin(),
-                                      voxel.ti.half_vertices_count,
-                                      odf_data[index].size()/(voxel.ti.half_vertices_count));
+                                      voxel.full_odf_dimension >> 1,
+                                      odf_data[index].size()/(voxel.full_odf_dimension >> 1));
             }
             odf_data.clear();
         }
@@ -140,141 +147,141 @@ public:
     }
 };
 
-
-
-struct AccumulateODF : public BaseProcess
-{
-    std::vector<unsigned int> odf_index_map;
-public:
-    virtual void init(Voxel& voxel)
-    {
-        std::vector<std::vector<float> >& odf_data = voxel.template_odfs;
-
-        unsigned int total_count = 0;
-        odf_index_map.resize(voxel.image_model->mask.size());
-        for (unsigned int index = 0;index < voxel.image_model->mask.size();++index)
-            if (voxel.image_model->mask[index])
-            {
-                odf_index_map[index] = total_count;
-                ++total_count;
-            }
-        if(odf_data.empty())
-        {
-            std::vector<unsigned int> size_list;
-            while (1)
-            {
-                if (total_count > odf_block_size)
-                {
-                    size_list.push_back(odf_block_size);
-                    total_count -= odf_block_size;
-                }
-                else
-                {
-                    size_list.push_back(total_count);
-                    break;
-                }
-            }
-            odf_data.resize(size_list.size());
-            for (unsigned int index = 0;index < odf_data.size();++index)
-                odf_data[index].resize(size_list[index]*(voxel.ti.half_vertices_count));
-        }
-
-    }
-    virtual void run(Voxel& voxel,VoxelData& data)
-    {
-        std::for_each(data.odf.begin(),data.odf.end(),boost::lambda::_1 /= voxel.qa_scaling);
-        unsigned int odf_index = odf_index_map[data.voxel_index];
-        image::add(voxel.template_odfs[odf_index/odf_block_size].begin() + (odf_index%odf_block_size)*(voxel.ti.half_vertices_count),
-                   voxel.template_odfs[odf_index/odf_block_size].begin() + (odf_index%odf_block_size+1)*(voxel.ti.half_vertices_count),
-                   data.odf.begin());
-    }
-    virtual void end(Voxel& voxel,MatFile& mat_writer)
-    {
-    }
-};
-
 struct ODFLoader : public BaseProcess
 {
-    std::vector<unsigned char> index_mapping1;
-    std::vector<unsigned int> index_mapping2;
+    const float* odf_data;
+    unsigned int cur_pos1;
+        unsigned int cur_pos2;
+	std::vector<std::vector<float> >* odfs;
 public:
     virtual void init(Voxel& voxel)
     {
-        //voxel.qa_scaling must be 1
-        voxel.qa_scaling = 1.0;
-        index_mapping1.resize(voxel.image_model->mask.size());
-        index_mapping2.resize(voxel.image_model->mask.size());
-        int voxel_index = 0;
-        for(unsigned char i = 0;i < voxel.template_odfs.size();++i)
-        {
-            for(unsigned int j = 0;j < voxel.template_odfs[i].size();j += voxel.ti.half_vertices_count)
-            {
-                int k_end = j + voxel.ti.half_vertices_count;
-                bool is_odf_zero = true;
-                for(int k = j;k < k_end;++k)
-                    if(voxel.template_odfs[i][k] != 0.0)
-                    {
-                        is_odf_zero = false;
-                        break;
-                    }
-                if(!is_odf_zero)
-                    for(;voxel_index < index_mapping1.size();++voxel_index)
-                        if(voxel.image_model->mask[voxel_index] != 0)
-                            break;
-                if(voxel_index >= index_mapping1.size())
-                    break;
-                index_mapping1[voxel_index] = i;
-                index_mapping2[voxel_index] = j;
-                ++voxel_index;
-            }
-        }
+        process_position = __FUNCTION__;
+        odfs = (std::vector<std::vector<float> >*)voxel.param;
+        cur_pos1 = 0;
+        cur_pos2 = 0;
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        int cur_index = data.voxel_index;
-        std::copy(voxel.template_odfs[index_mapping1[cur_index]].begin() +
-                  index_mapping2[cur_index],
-                  voxel.template_odfs[index_mapping1[cur_index]].begin() +
-                  index_mapping2[cur_index]+data.odf.size(),data.odf.begin());
-
+        process_position = __FUNCTION__;
+        std::copy((*odfs)[cur_pos1].begin() + cur_pos2,(*odfs)[cur_pos1].begin() + cur_pos2 + data.odf.size(),data.odf.begin());
+        cur_pos2 += data.odf.size();
+		if(cur_pos2 >= (*odfs)[cur_pos1].size())
+		{
+			cur_pos2 = 0;
+			++cur_pos1;
+		}
     }
     virtual void end(Voxel& voxel,MatFile& mat_writer)
     {
+        process_position = __FUNCTION__;
         if (voxel.need_odf)
         {
             set_title("output odfs");
-            for (unsigned int index = 0;index < voxel.template_odfs.size();++index)
+            for (unsigned int index = 0;index < (*odfs).size();++index)
             {
                 std::ostringstream out;
                 out << "odf" << index;
-                mat_writer.add_matrix(out.str().c_str(),&*voxel.template_odfs[index].begin(),
-                                      voxel.ti.half_vertices_count,
-                                      voxel.template_odfs[index].size()/(voxel.ti.half_vertices_count));
+                mat_writer.add_matrix(out.str().c_str(),&*(*odfs)[index].begin(),
+                                      voxel.full_odf_dimension >> 1,
+                                      (*odfs)[index].size()/(voxel.full_odf_dimension >> 1));
             }
         }
     }
 };
+
+struct QAScaling : public BaseProcess
+{
+protected:
+    std::vector<float> max_odf;
+    float iso_qa;
+    image::vector<3,int> max_odf_pos;
+    std::vector<float> iso;
+protected:
+    boost::mutex mutex;
+public:
+    virtual void init(Voxel& voxel)
+    {
+        process_position = __FUNCTION__;
+        iso.clear();
+        iso.resize(voxel.total_size);
+        iso_qa = 0;
+        voxel.qa_scaling = 1.0;
+    }
+    virtual void run(Voxel& voxel, VoxelData& data)
+    {
+        process_position = __FUNCTION__;
+        if (voxel.odf_deconvolusion)
+            return;
+        iso[data.voxel_index] =
+           *std::min_element(data.odf.begin(),data.odf.end());
+
+        float sd = image::standard_deviation(data.odf.begin(),data.odf.end());
+        // get the isotropic part and find the free water diffusion
+
+        boost::mutex::scoped_lock lock(mutex);
+        if (iso_qa < iso[data.voxel_index]-3.0*sd)
+        {
+            iso_qa = iso[data.voxel_index]-3.0*sd;
+            max_odf = data.odf;
+            int p_index = data.voxel_index;
+            int x = p_index % voxel.matrix_width;
+            p_index -= x;
+            p_index /= voxel.matrix_width;
+            int y = p_index % voxel.matrix_height;
+            p_index -= y;
+            p_index /= voxel.matrix_height;
+            max_odf_pos[0] = x;
+            max_odf_pos[1] = y;
+            max_odf_pos[2] = p_index;
+        }
+
+    }
+    virtual void end(Voxel& voxel,MatFile& mat_writer)
+    {
+        if (voxel.odf_deconvolusion)
+            return;
+        voxel.qa_scaling = std::accumulate(max_odf.begin(),max_odf.end(),0.0)
+                            /(max_odf.size());
+
+        // scaled to 1mm cubic
+        if(voxel.voxel_size[0] == 0.0 ||
+           voxel.voxel_size[1] == 0.0 ||
+           voxel.voxel_size[2] == 0.0)
+            throw std::runtime_error("No spatial information found in src file. Recreate src file or contact developer for assistance");
+        voxel.qa_scaling /= voxel.voxel_size[0];
+        voxel.qa_scaling /= voxel.voxel_size[1];
+        voxel.qa_scaling /= voxel.voxel_size[2];
+
+        mat_writer.add_matrix("qa_scaling",&voxel.qa_scaling,1,1);
+        mat_writer.add_matrix("max_odf_pos",max_odf_pos.begin(),3,1);
+        std::for_each(max_odf.begin(),max_odf.end(),boost::lambda::_1 /= voxel.qa_scaling);
+        mat_writer.add_matrix("max_odf",&*max_odf.begin(),1,max_odf.size());
+        mat_writer.add_matrix("iso",&*iso.begin(),1,iso.size());
+
+
+    }
+};
+
 
 struct SaveFA : public BaseProcess
 {
 protected:
-    std::vector<float> gfa,iso;
+    std::vector<float> gfa;
     std::vector<std::vector<float> > fa;
 public:
     virtual void init(Voxel& voxel)
     {
-
+        process_position = __FUNCTION__;
         fa.resize(voxel.max_fiber_number);
         for (unsigned int index = 0;index < voxel.max_fiber_number;++index)
             fa[index].resize(voxel.total_size);
         gfa.clear();
         gfa.resize(voxel.total_size);
-        iso.clear();
-        iso.resize(voxel.total_size);
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        iso[data.voxel_index] = data.min_odf;
+        process_position = __FUNCTION__;
         gfa[data.voxel_index] = GeneralizedFA()(data.odf);
         for (unsigned int index = 0;index < voxel.max_fiber_number;++index)
             fa[index][data.voxel_index] = data.fa[index];
@@ -283,27 +290,9 @@ public:
     {
         set_title("output gfa");
         mat_writer.add_matrix("gfa",&*gfa.begin(),1,gfa.size());
-
-        if(!voxel.odf_deconvolusion)
-        {
-            voxel.qa_scaling = *std::max_element(iso.begin(),iso.end());
-            // scaled to 1mm cubic
-            if(voxel.voxel_size[0] != 0.0 &&
-               voxel.voxel_size[1] != 0.0 &&
-               voxel.voxel_size[2] != 0.0)
-            {
-                voxel.qa_scaling /= voxel.voxel_size[0];
-                voxel.qa_scaling /= voxel.voxel_size[1];
-                voxel.qa_scaling /= voxel.voxel_size[2];
-            }
-            mat_writer.add_matrix("qa_scaling",&voxel.qa_scaling,1,1);
-            std::for_each(iso.begin(),iso.end(),boost::lambda::_1 /= voxel.qa_scaling);
-            mat_writer.add_matrix("iso",&*iso.begin(),1,iso.size());
-
-        if (voxel.qa_scaling != 0.0)
+        if (!voxel.odf_deconvolusion && voxel.qa_scaling != 0.0)
             for (unsigned int i = 0;i < voxel.max_fiber_number;++i)
                 std::for_each(fa[i].begin(),fa[i].end(),boost::lambda::_1 /= voxel.qa_scaling);
-        }
 
         for (unsigned int index = 0;index < voxel.max_fiber_number;++index)
         {
@@ -313,29 +302,11 @@ public:
             std::string fa_str = "fa";
             fa_str += num;
             set_title(fa_str.c_str());
-            mat_writer.add_matrix(fa_str.c_str(),&*fa[index].begin(),1,fa[index].size());
-        }
-
-        // output normalized qa
-        {
-            float max_qa = 0.0;
-            for (unsigned int i = 0;i < voxel.max_fiber_number;++i)
-                max_qa = std::max<float>(*std::max_element(fa[i].begin(),fa[i].end()),max_qa);
-
-            if(max_qa != 0.0)
-            for (unsigned int index = 0;index < voxel.max_fiber_number;++index)
-            {
-                std::for_each(fa[index].begin(),fa[index].end(),boost::lambda::_1 /= max_qa);
-                std::ostringstream out;
-                out << index;
-                std::string num = out.str();
-                std::string fa_str = "nqa";
-                fa_str += num;
-                set_title(fa_str.c_str());
+            if (voxel.gfa_as_threshold)
+                mat_writer.add_matrix(fa_str.c_str(),&*gfa.begin(),1,gfa.size());
+            else
                 mat_writer.add_matrix(fa_str.c_str(),&*fa[index].begin(),1,fa[index].size());
-            }
         }
-
     }
 };
 
@@ -348,14 +319,14 @@ protected:
 public:
     virtual void init(Voxel& voxel)
     {
-
+        process_position = __FUNCTION__;
         findex.resize(voxel.max_fiber_number);
         for (unsigned int index = 0;index < voxel.max_fiber_number;++index)
             findex[index].resize(voxel.total_size);
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-
+        process_position = __FUNCTION__;
         for (unsigned int index = 0;index < voxel.max_fiber_number;++index)
             findex[index][data.voxel_index] = data.dir_index[index];
     }
@@ -382,14 +353,14 @@ protected:
 public:
     virtual void init(Voxel& voxel)
     {
-
+        process_position = __FUNCTION__;
         dir.resize(voxel.max_fiber_number);
         for (unsigned int index = 0;index < voxel.max_fiber_number;++index)
             dir[index].resize(voxel.total_size*3);
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-
+        process_position = __FUNCTION__;
         unsigned int dir_index = data.voxel_index;
         for (unsigned int index = 0;index < voxel.max_fiber_number;++index)
             std::copy(data.dir[index].begin(),data.dir[index].end(),dir[index].begin() + dir_index + dir_index + dir_index);
@@ -416,17 +387,18 @@ struct SearchLocalMaximum
 {
     std::vector<std::vector<unsigned short> > neighbor;
     std::map<float,unsigned short,std::greater<float> > max_table;
-    void init(Voxel& voxel)
+    void init(void)
     {
-
-        unsigned int half_odf_size = voxel.ti.half_vertices_count;
-        unsigned int faces_count = voxel.ti.faces.size();
-        neighbor.resize(voxel.ti.half_vertices_count);
+        process_position = __FUNCTION__;
+        unsigned int half_odf_size = ti_vertices_count() >> 1;
+        unsigned int faces_count = ti_faces_count();
+        neighbor.resize(ti_vertices_count() >> 1);
         for (unsigned int index = 0;index < faces_count;++index)
         {
-            short i1 = voxel.ti.faces[index][0];
-            short i2 = voxel.ti.faces[index][1];
-            short i3 = voxel.ti.faces[index][2];
+            short* i = ti_faces(index);
+            short i1 = i[0];
+            short i2 = i[1];
+            short i3 = i[2];
             if (i1 >= half_odf_size)
                 i1 -= half_odf_size;
             if (i2 >= half_odf_size)
@@ -464,6 +436,43 @@ struct SearchLocalMaximum
 };
 
 
+struct ODFDecomposition : public BaseProcess
+{
+protected:
+    ConvolutedOdfComponent odf_component;
+    boost::mutex mutex;
+public:
+    virtual void init(Voxel& voxel)
+    {
+        process_position = __FUNCTION__;
+        if (voxel.odf_decomposition)
+        {
+            odf_component.icosa_components.resize(ti_vertices_count() >> 1);
+            for (unsigned int index = 0;index < ti_vertices_count() >> 1;++index)
+                odf_component.icosa_components[index].initialize(index);
+        }
+    }
+    virtual void run(Voxel& voxel, VoxelData& data)
+    {
+        process_position = __FUNCTION__;
+        if (voxel.odf_decomposition)
+        {
+            float min_odf = 0;
+            boost::mutex::scoped_lock lock(mutex);
+            std::vector<float> dodf(data.odf.size());
+            min_odf = RemoveIsotropicPart()(data.odf);
+            for (unsigned int index = 0;index < data.odf.size()/2;++index)
+            {
+                odf_component.decomposeODF(data.odf);
+                unsigned short mv = odf_component.getMainVector();
+                dodf[mv] += odf_component.getExtractedODF()[mv];
+            }
+            data.odf.swap(dodf);
+        }
+    }
+};
+
+
 struct DetermineFiberDirections : public BaseProcess
 {
     SearchLocalMaximum lm;
@@ -471,13 +480,15 @@ struct DetermineFiberDirections : public BaseProcess
 public:
     virtual void init(Voxel& voxel)
     {
-        lm.init(voxel);
+        process_position = __FUNCTION__;
+        lm.init();
     }
 
     virtual void run(Voxel& voxel,VoxelData& data)
     {
-        data.min_odf = *std::min_element(data.odf.begin(),data.odf.end());
+        process_position = __FUNCTION__;
         boost::mutex::scoped_lock lock(mutex);
+        data.min_odf = *std::min_element(data.odf.begin(),data.odf.end());
         lm.search(data.odf);
         std::map<float,unsigned short,std::greater<float> >::const_iterator iter = lm.max_table.begin();
         std::map<float,unsigned short,std::greater<float> >::const_iterator end = lm.max_table.end();
@@ -551,7 +562,7 @@ public:
     virtual void init(Voxel& voxel)
     {
         QSpace2Odf::init(voxel);
-
+        process_position = __FUNCTION__;
 
         b_vec.resize(voxel.bvalues.size());
         float sigma = voxel.param[0]; //optimal 1.24
@@ -563,7 +574,7 @@ public:
     }
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-
+        process_position = __FUNCTION__;
 
         gradient_fun g(b_vec,data.space);
         fun f(b_vec,data.space);
@@ -573,12 +584,12 @@ public:
             if (data.fa[index] <= 0.0)
                 break;
 
-            image::vector<3,float> initial_dir(voxel.ti.vertices[data.dir_index[index]]);
+            image::vector<3,float> initial_dir(ti_vertices(data.dir_index[index]));
             image::optimization::gradient_descent(initial_dir,f,g,(double)0.01);
             double fa = -data.min_odf-f(initial_dir);
             initial_dir.normalize();
-            if (std::abs(image::vector<3,float>(voxel.ti.vertices[data.dir_index[index]]) * initial_dir) < 0.939692623) // the angle greater than 20 degrees
-                result[data.fa[index]] = image::vector<3,float>(voxel.ti.vertices[data.dir_index[index]]);
+            if (std::abs(image::vector<3,float>(ti_vertices(data.dir_index[index])) * initial_dir) < 0.939692623) // the angle greater than 20 degrees
+                result[data.fa[index]] = image::vector<3,float>(ti_vertices(data.dir_index[index]));
             else
                 result[fa] = initial_dir;
         }
