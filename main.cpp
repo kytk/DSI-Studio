@@ -136,30 +136,6 @@ int main(int ac, char *av[])
      FWHM = 3.82004 Var = 0.0306298
         13.4767 6.10598 8.46129
     */
-    /*
-    normalization<image::basic_image<double,3> > n;
-    if(!n.load_from_file("FMRIB58_FA_1mm.nii","GFA_0171.src.gz.odf8.f5rec.gqi.1.3.fib.nii"))
-        return 0;
-    n.normalize();
-    image::basic_image<double,3> out;
-
-
-
-    n.warp_image(n.VF,out,2.0);
-    image::vector<3,double> p1,p2;
-    n.warp_coordinate(p1,p2);
-    std::cout<< p2 << std::endl;
-    image::io::nifti header;
-    #ifdef SPM_DEBUG
-    image::flip_x(out);
-    #else
-    image::flip_xy(out);
-    #endif
-    header << out;
-    header.set_image_transformation(n.trans_to_mni);
-    header.save_to_file("c:/warp.nii");
-    return 0;
-    */
     program_base = av[0];
     if(ac > 2)
     {
@@ -205,15 +181,6 @@ int main(int ac, char *av[])
         return 1;
     }
 
-
-    /*
-    QSignalSpyCallbackSet cb;
-    cb.signal_begin_callback = q4pugss_BeginCallBackSignal;
-    cb.signal_end_callback   = q4pugss_EndCallBackSignal;
-    cb.slot_begin_callback   = q4pugss_BeginCallBackSlot;
-    cb.slot_end_callback     = q4pugss_EndCallBackSlot;
-    qt_register_signal_spy_callbacks(cb);
-    */
 
     QApplication::setStyle(new QCleanlooksStyle);
     QApplication a(ac,av);
